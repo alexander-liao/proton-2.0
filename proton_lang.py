@@ -181,28 +181,10 @@ def global_eval(node, nest_level = 0, global_values = {}, scope = {}):
 		return ProtonObject(eval(str(node)))
 
 def remove_comments(string):
-	last_char = "\0"
-	output = ""
-	comment_mode = 0
-	for char in string:
-		if comment_mode == -1:
-			if char == "\n":
-				output.append("\n")
-				comment_mode = 0
-		elif comment_mode > 0:
-			if last_char + char == "*/":
-				comment_mode -= 1
-		elif last_char + char == "//":
-			comment_mode = -1
-			output = output[:-1]
-		elif last_char + char == "/*":
-			comment_mode += 1
-			output = output[:-1]
-		else:
-			output += char
-		last_char = char
-	return output
+	return string # TODO make this actually work
 
 Expression.grammar_resolve_refs()
 
-print(global_eval(Expression.parser().parse_string(remove_comments(sys.stdin.read()))))
+grammar_whitespace_mode = "optional"
+
+print(global_eval(Expression.parser().parse_string(remove_comments(sys.stdin.read().strip()))))
