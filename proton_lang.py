@@ -181,7 +181,40 @@ def global_eval(node, nest_level = 0, global_values = {}, scope = {}):
 		return ProtonObject(eval(str(node)))
 
 def remove_comments(string):
-	return string # TODO make this actually work
+	output = ""
+	i = 0
+	while i < len(string):
+		if string[i] == "\'" or string[i] == "\"":
+			close = string[i]
+			output += close
+			i += 1
+			while string[i] != close:
+				if string[i] == "\\":
+					output += "\\" + string[i + 1]
+					i += 2
+				else:
+					output += string[i]
+					i += 1
+			output += close
+			i += 1
+		elif string[i:i + 2] == "//":
+			while i < len(string) and string[i] != "\n":
+				i += 1
+		elif string[i:i + 2] == "/*":
+			nesting = 1
+			if i >= len(string):
+				raise RuntimeError("Unclosed multiline comment")
+			while nesting:
+				i += 1
+				if string[i:i + 2] == "/*":
+					nesting += 1
+				elif string[i:i + 2] == "*/":
+					nesting -= 1
+			i += 2
+		else:
+			output += string[i]
+			i += 1
+	return output
 
 Expression.grammar_resolve_refs()
 
