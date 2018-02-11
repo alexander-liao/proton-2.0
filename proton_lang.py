@@ -65,16 +65,26 @@ class Exponent(Grammar):
 	grammar = LIST_OF(REF("Expr") | Value, sep = "**", grammar_whitespace_mode = "optional")
 
 class Product(Grammar):
-	grammar = LIST_OF(REF("Expr") | Exponent, sep = OR("*", "/", "/_", "%"), grammar_whitespace_mode = "optional")
+	grammar = LIST_OF(REF("Expr") | Exponent, sep = OR("*", "/", "/,", "%"), grammar_whitespace_mode = "optional")
 
 class Sum(Grammar):
 	grammar = LIST_OF(REF("Expr") | Product, sep = OR("+", "-"), grammar_whitespace_mode = "optional")
 
+class Assignable(Grammar):
+	grammar = Identifier
+
+class Assignment(Grammar):
+	grammar = (LIST_OF(Assignable, sep = "=", grammar_whitespace_mode = "optional"), "=", REF("Expression"))
+	grammar_whitespace_mode = "optional"
+
+class _expr(Grammar):
+	grammar = Sum | Product | Value
+
 class Expr(Grammar):
-	grammar = ("(", Sum | Product | Value, ")")
+	grammar = ("(", Assignment | _expr, ")")
 
 class Expression(Grammar):
-	grammar = Expr | Sum | Product | Value
+	grammar = Expr | Assignment | _expr
 
 class GetterWrapper:
 	def __init__(self, object = None):
@@ -137,6 +147,24 @@ def floor(val):
 
 global_scope = {}
 
+def assn(node, val, scope):
+	if node.grammar_name == "Identifier":
+		name = str(node)
+		for i in range(len(scope)):
+			if name in scope[~i]:
+				scope[~i][name] = val
+				break
+		else:
+			scope[-1][name] = val
+	else:
+		assn(node[0], val, scope)
+
+def assign(nodes, scope):
+	value = global_eval(nodes[-1])
+	for node in nodes[:-1]:
+		assn(node, value, scope)
+	return value
+
 def global_eval(node, nest_level = 0, scope = [global_scope]):
 	evaluate = lambda node: global_eval(node, nest_level + 1, scope)
 	def fold(node, reducers, reverse = False):
@@ -152,12 +180,16 @@ def global_eval(node, nest_level = 0, scope = [global_scope]):
 			return values[0]
 	if node.grammar_name == "Expression":
 		return evaluate(node[0])
+	elif node.grammar_name == "_expr":
+		return evaluate(node[0])
 	elif node.grammar_name == "Expr":
 		return evaluate(node[1])
+	elif node.grammar_name == "Assignment":
+		return assign(list(node[0])[::2] + [node[2]], scope)
 	elif node.grammar_name == "Exponent":
 		return fold(node, get_reducers({"**": "__pow__"}), True)
 	elif node.grammar_name == "Product":
-		return fold(node, get_reducers({"*": "__mul__", "/": "__div__", "/_": lambda val: chain_attempts(lambda: val("__floordiv__"), lambda: lambda a: floor(val("__div__")(a))), "%": "__mod__"}))
+		return fold(node, get_reducers({"*": "__mul__", "/": "__div__", "/,": lambda val: chain_attempts(lambda: val("__floordiv__"), lambda: lambda a: floor(val("__div__")(a))), "%": "__mod__"}))
 	elif node.grammar_name == "Sum":
 		return fold(node, get_reducers({"+": "__add__", "-": "__sub__"}))
 	elif node.grammar_name == "Value":
@@ -228,4 +260,10 @@ Expression.grammar_resolve_refs()
 
 grammar_whitespace_mode = "optional"
 
-print(global_eval(Expression.parser().parse_string(remove_comments(sys.stdin.read().strip()))))
+while True:
+	try:
+		print(global_eval(Expression.parser().parse_string(remove_comments(input(">>> ")))))
+	except KeyboardInterrupt:
+		print("\b\b  \nKeyboardInterrupt")
+	except EOFError:
+		break
