@@ -135,8 +135,10 @@ def floor(val):
 	except:
 		return val - val % 1
 
-def global_eval(node, nest_level = 0, global_values = {}, scope = {}):
-	evaluate = lambda node: global_eval(node, nest_level + 1, global_values, scope)
+global_scope = {}
+
+def global_eval(node, nest_level = 0, scope = [global_scope]):
+	evaluate = lambda node: global_eval(node, nest_level + 1, scope)
 	def fold(node, reducers, reverse = False):
 		values = list(map(evaluate, list(node[0])[::2]))
 		operators = list(map(str, list(node[0])[1::2]))[::-1 if reverse else 1]
@@ -160,6 +162,12 @@ def global_eval(node, nest_level = 0, global_values = {}, scope = {}):
 		return fold(node, get_reducers({"+": "__add__", "-": "__sub__"}))
 	elif node.grammar_name == "Value":
 		return evaluate(node[0])
+	elif node.grammar_name == "Identifier":
+		name = str(node)
+		for subscope in scope[::-1]:
+			if name in subscope:
+				return subscope[name]
+		raise NameError("Identifier `%s` has not been declared in this scope or any parent scopes" % name)
 	elif node.grammar_name == "Literal":
 		return evaluate(node[0])
 	elif node.grammar_name == "Number":
