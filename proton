@@ -1,4 +1,6 @@
-import sys, math, traceback
+#!/usr/bin/env python3
+
+import sys, math, traceback, ast
 
 from fractions import *
 from modgrammar import *
@@ -95,6 +97,12 @@ class Expr(Grammar):
 class Expression(Grammar):
 	grammar = Expr | Assignment | _expr
 
+class Statement(Grammar):
+	grammar = (Expression, OPTIONAL(";"))
+
+class Program(Grammar):
+	grammar = REPEAT(Statement, grammar_whitespace_mode = "optional")
+
 class GetterWrapper:
 	def __init__(self, object = None):
 		self.object = object
@@ -105,6 +113,8 @@ class GetterWrapper:
 			return getattr(self.object, index)
 	def __str__(self):
 		return str(self.object)
+	def __repr__(self):
+		return repr(self.object)
 
 class ProtonObject:
 	def __init__(self, parent = None, attrs = None):
@@ -117,6 +127,8 @@ class ProtonObject:
 			return self.parent(index)
 	def __str__(self):
 		return str(self.parent)
+	def __repr__(self):
+		return repr(self.parent)
 
 def base_convert(string, base, indexstr = None):
 	if "." in string or indexstr:
@@ -154,7 +166,7 @@ def floor(val):
 	except:
 		return val - val % 1
 
-global_scope = {"a": ProtonObject(lambda x: x + 1)}
+global_scope = {"a": ProtonObject(lambda x: x + 1), "print": ProtonObject(print)}
 
 def assn(node, val, scope):
 	if node.grammar_name == "Identifier":
@@ -187,7 +199,11 @@ def global_eval(node, nest_level = 0, scope = [global_scope]):
 			for i in range(1, len(values)):
 				values[0] = ProtonObject(reducers[operators.pop(0)](values[0])(values[i].parent.object))
 			return values[0]
-	if node.grammar_name == "Expression":
+	if node.grammar_name == "Program":
+		return list(map(evaluate, node[0]))
+	elif node.grammar_name == "Statement":
+		return evaluate(node[0])
+	elif node.grammar_name == "Expression":
 		return evaluate(node[0])
 	elif node.grammar_name == "_expr":
 		return evaluate(node[0])
@@ -233,7 +249,7 @@ def global_eval(node, nest_level = 0, scope = [global_scope]):
 	elif node.grammar_name == "DecimalNumber":
 		return to_float(str(node))
 	elif node.grammar_name == "String":
-		return ProtonObject(eval(str(node)))
+		return ProtonObject(ast.literal_eval(str(node)))
 
 def remove_comments(string):
 	output = ""
@@ -275,14 +291,17 @@ Expression.grammar_resolve_refs()
 
 grammar_whitespace_mode = "optional"
 
-while True:
-	try:
-		print(global_eval(Expression.parser().parse_string(remove_comments(input(">>> ")))))
-	except KeyboardInterrupt:
-		print("\b\b  \nKeyboardInterrupt")
-	except EOFError:
-		break
-	except RecursionError:
-		print("RecursionError - Likely caused by incomplete parsing - check your statements")
-	except Exception as e:
-		traceback.print_exc()
+if len(sys.argv) > 1:
+	global_eval(Program.parser().parse_string(remove_comments(open(sys.argv[1], "r").read().strip())))
+else:
+	while True:
+		try:
+			print(global_eval(Program.parser().parse_string(remove_comments(input(">>> ")))))
+		except KeyboardInterrupt:
+			print("\b\b  \nKeyboardInterrupt")
+		except EOFError:
+			break
+		except RecursionError:
+			print("RecursionError - Likely caused by incomplete parsing - check your statements")
+		except Exception as e:
+			traceback.print_exc()
