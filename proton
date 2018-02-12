@@ -97,13 +97,25 @@ class Value(Grammar):
 	grammar = Identifier | Literal | Bracketed
 
 class FunctionAtCall(Grammar):
-	grammar = LIST_OF(REF("FunctionCall") | Value, sep = "@", grammar_whitespace_mode = "optional")
+	grammar = LIST_OF(REF("FunctionCall") | REF("IndexAccess") | Value, sep = "@", grammar_whitespace_mode = "optional")
 
 class FunctionPipeCall(Grammar):
 	grammar = LIST_OF(FunctionAtCall | Value, sep = "|>", grammar_whitespace_mode = "optional")
 
 class FunctionCall(Grammar):
 	grammar = (Bracketed | Identifier, "(", LIST_OF(REF("Expression"), sep = ",", min = 0, grammar_whitespace_mode = "optional"), ")")
+
+class OneSlice(Grammar):
+	grammar = (OPTIONAL(REF("Expression")), ":", OPTIONAL(REF("Expression")))
+
+class TwoSlice(Grammar):
+	grammar = (OPTIONAL(REF("Expression")), ":", OPTIONAL(REF("Expression")), ":", OPTIONAL(REF("Expression")))
+
+class IndexAccessor(Grammar):
+	grammar = OneSlice | TwoSlice | REF("Expression")
+
+class IndexAccess(Grammar):
+	grammar = (Value, "[", LIST_OF(IndexAccessor, sep = ",", grammar_whitespace_mode = "optional"), "]")
 
 class Exponent(Grammar):
 	grammar = LIST_OF(Value, sep = "**", grammar_whitespace_mode = "optional")
@@ -199,7 +211,7 @@ def floor(val):
 	except:
 		return val - val % 1
 
-global_scope = {"print": ProtonObject(print), "input": ProtonObject(input), "int": ProtonObject(int)}
+global_scope = {"print": ProtonObject(print), "input": ProtonObject(input), "int": ProtonObject(int), "test": ProtonObject([1, 2, 3])}
 
 def assn(node, val, scope):
 	if node.grammar_name == "Identifier":
@@ -250,6 +262,10 @@ def global_eval(node, nest_level = 0, scope = [global_scope]):
 		return fold([list(node[0])[::-1]], get_reducers({"|>": "__call__"}), True)
 	elif node.grammar_name == "FunctionCall":
 		return ProtonObject(evaluate(node[0])("__call__")(*[evaluate(n).parent.object for n in list(node[2])[::2]]))
+	elif node.grammar_name == "IndexAccess":
+		getter = evaluate(node[0])("__call__")
+		l = [getter(evaluate(n)) for n in list(node[3])[::2]]
+		return l[0] if len(l) == 0 else l
 	elif node.grammar_name == "Exponent":
 		return fold(node, get_reducers({"**": "__pow__"}), True)
 	elif node.grammar_name == "Product":
