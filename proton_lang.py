@@ -1,4 +1,4 @@
-import sys, math
+import sys, math, traceback
 
 from fractions import *
 from modgrammar import *
@@ -47,7 +47,7 @@ class String(Grammar):
 	grammar = OR(("\"", REPEAT(OR(ANY_EXCEPT("\""), ("\\", ANY))), "\""), ("'", REPEAT(OR(ANY_EXCEPT("'"), ("\\", ANY), "'"))))
 
 class Number(Grammar):
-	grammar = (DecimalNumber | BinaryNumber | HexNumber | ExtOctalNumber | OctalNumber, OPTIONAL("j"))
+	grammar = (OPTIONAL("-"), DecimalNumber | BinaryNumber | HexNumber | ExtOctalNumber | OctalNumber, OPTIONAL("j"))
 
 class Literal(Grammar):
 	grammar = String | Number
@@ -61,8 +61,17 @@ class Identifier(Grammar):
 class Value(Grammar):
 	grammar = Identifier | Literal
 
+class FunctionAtCall(Grammar):
+	grammar = LIST_OF(REF("Expr") | Value, sep = "@", grammar_whitespace_mode = "optional")
+
+class FunctionPipeCall(Grammar):
+	grammar = LIST_OF(REF("Expr") | Value, sep = "|>", grammar_whitespace_mode = "optional")
+
+class FunctionCall(Grammar):
+	grammar = (REF("Expression") | Value, "(", REF("Expression"), ")")
+
 class Exponent(Grammar):
-	grammar = LIST_OF(REF("Expr") | Value, sep = "**", grammar_whitespace_mode = "optional")
+	grammar = LIST_OF(REF("Expr") | FunctionAtCall, sep = "**", grammar_whitespace_mode = "optional")
 
 class Product(Grammar):
 	grammar = LIST_OF(REF("Expr") | Exponent, sep = OR("*", "/", "/,", "%"), grammar_whitespace_mode = "optional")
@@ -78,7 +87,7 @@ class Assignment(Grammar):
 	grammar_whitespace_mode = "optional"
 
 class _expr(Grammar):
-	grammar = Sum | Product | Value
+	grammar = Sum | Product | Exponent | FunctionAtCall | FunctionPipeCall | FunctionCall | Value
 
 class Expr(Grammar):
 	grammar = ("(", Assignment | _expr, ")")
@@ -145,7 +154,7 @@ def floor(val):
 	except:
 		return val - val % 1
 
-global_scope = {}
+global_scope = {"a": ProtonObject(lambda x: x + 1)}
 
 def assn(node, val, scope):
 	if node.grammar_name == "Identifier":
@@ -186,6 +195,12 @@ def global_eval(node, nest_level = 0, scope = [global_scope]):
 		return evaluate(node[1])
 	elif node.grammar_name == "Assignment":
 		return assign(list(node[0])[::2] + [node[2]], scope)
+	elif node.grammar_name == "FunctionAtCall":
+		return fold(node, get_reducers({"@": "__call__"}), True)
+	elif node.grammar_name == "FunctionPipeCall":
+		return fold([list(node[0])[::-1]], get_reducers({"|>": "__call__"}), True)
+	elif node.grammar_name == "FunctionCall":
+		return ProtonObject(evaluate(node[0])("__call__")(evaluate(node[2]).parent.object))
 	elif node.grammar_name == "Exponent":
 		return fold(node, get_reducers({"**": "__pow__"}), True)
 	elif node.grammar_name == "Product":
@@ -203,7 +218,7 @@ def global_eval(node, nest_level = 0, scope = [global_scope]):
 	elif node.grammar_name == "Literal":
 		return evaluate(node[0])
 	elif node.grammar_name == "Number":
-		return ProtonObject(evaluate(node[0]) * (1j if node[1] else 1))
+		return ProtonObject((-1 if node[0] else 1) * evaluate(node[1]) * (1j if node[2] else 1))
 	elif node.grammar_name == "HexNumber":
 		s = str(node).split("x")
 		return base_convert(s[1].lower(), 16) * 16 ** int(s[0])
@@ -267,3 +282,7 @@ while True:
 		print("\b\b  \nKeyboardInterrupt")
 	except EOFError:
 		break
+	except RecursionError:
+		print("RecursionError - Likely caused by incomplete parsing - check your statements")
+	except Exception as e:
+		traceback.print_exc()
