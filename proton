@@ -5,7 +5,37 @@ import sys, math, traceback, ast
 from fractions import *
 from modgrammar import *
 
-sympy = "--sympy" in sys.argv
+args = []
+file = ""
+code = ""
+
+flags = {"--sympy": 0, "c": 0}
+
+i = 1
+
+while i < len(sys.argv):
+	arg = sys.argv[i]
+	if arg and arg[0] == "-":
+		for a in arg[1:]:
+			if a in flags:
+				num = flags[a]
+				args.append((a, sys.argv[i + 1:][:num]))
+				i += num
+	elif arg in flags:
+		num = flags[arg]
+		args.append((arg, sys.argv[i + 1:][:num]))
+		i += num
+	else:
+		file = arg
+	i += 1
+
+sympy = False
+
+for flag in args:
+	if flag[0] == "--sympy":
+		sympy = True
+	elif flag[0] == "c":
+		code, file = file, ""
 
 if sympy: import sympy
 else: import mpmath
@@ -46,7 +76,7 @@ class HexNumber(Grammar):
 	grammar = (L("0") | (NZD, OPTIONAL(WORD("0-9"))), "x", number_format("0123456789abcdefABCDEF"))
 
 class String(Grammar):
-	grammar = OR(("\"", REPEAT(OR(ANY_EXCEPT("\""), ("\\", ANY))), "\""), ("'", REPEAT(OR(ANY_EXCEPT("'"), ("\\", ANY), "'"))))
+	grammar = OR(("\"", ZERO_OR_MORE(OR(ANY_EXCEPT("\""), ("\\", ANY))), "\""), ("'", REPEAT(OR(ANY_EXCEPT("'"), ("\\", ANY), "'"))))
 
 class Number(Grammar):
 	grammar = (OPTIONAL("-"), DecimalNumber | BinaryNumber | HexNumber | ExtOctalNumber | OctalNumber, OPTIONAL("j"))
@@ -54,32 +84,32 @@ class Number(Grammar):
 class Literal(Grammar):
 	grammar = String | Number
 
-class Keyword(Grammar):
-	grammar = OR("if", "else", "for", "while", "unless", "until", "class")
-
 class Identifier(Grammar):
 	grammar = WORD("A-Za-z_", "A-Za-z_0-9")
 
+class Bracketed(Grammar):
+	grammar = ("(", REF("_expr"), ")")
+
 class Value(Grammar):
-	grammar = Identifier | Literal
+	grammar = Identifier | Literal | Bracketed
 
 class FunctionAtCall(Grammar):
-	grammar = LIST_OF(REF("Expr") | Value, sep = "@", grammar_whitespace_mode = "optional")
+	grammar = LIST_OF(REF("FunctionCall") | Value, sep = "@", grammar_whitespace_mode = "optional")
 
 class FunctionPipeCall(Grammar):
-	grammar = LIST_OF(REF("Expr") | Value, sep = "|>", grammar_whitespace_mode = "optional")
+	grammar = LIST_OF(FunctionAtCall | Value, sep = "|>", grammar_whitespace_mode = "optional")
 
 class FunctionCall(Grammar):
-	grammar = (REF("Expression") | Value, "(", REF("Expression"), ")")
+	grammar = (Bracketed | Identifier, "(", REF("Expression"), ")")
 
 class Exponent(Grammar):
-	grammar = LIST_OF(REF("Expr") | FunctionAtCall, sep = "**", grammar_whitespace_mode = "optional")
+	grammar = LIST_OF(Value, sep = "**", grammar_whitespace_mode = "optional")
 
 class Product(Grammar):
-	grammar = LIST_OF(REF("Expr") | Exponent, sep = OR("*", "/", "/,", "%"), grammar_whitespace_mode = "optional")
+	grammar = LIST_OF(Value, sep = OR("*", "/", "/,", "%"), grammar_whitespace_mode = "optional")
 
 class Sum(Grammar):
-	grammar = LIST_OF(REF("Expr") | Product, sep = OR("+", "-"), grammar_whitespace_mode = "optional")
+	grammar = LIST_OF(Value, sep = OR("+", "-"), grammar_whitespace_mode = "optional")
 
 class Assignable(Grammar):
 	grammar = Identifier
@@ -144,7 +174,7 @@ def base_convert(string, base, indexstr = None):
 			mul /= base
 		return val
 	else:
-		return int(string, base)
+		return to_float(int(string, base))
 
 def get_reducers(d):
 	return {e: reducer(d[e]) for e in d}
@@ -166,7 +196,7 @@ def floor(val):
 	except:
 		return val - val % 1
 
-global_scope = {"a": ProtonObject(lambda x: x + 1), "print": ProtonObject(print)}
+global_scope = {"print": ProtonObject(print), "input": ProtonObject(input), "int": ProtonObject(int)}
 
 def assn(node, val, scope):
 	if node.grammar_name == "Identifier":
@@ -220,11 +250,13 @@ def global_eval(node, nest_level = 0, scope = [global_scope]):
 	elif node.grammar_name == "Exponent":
 		return fold(node, get_reducers({"**": "__pow__"}), True)
 	elif node.grammar_name == "Product":
-		return fold(node, get_reducers({"*": "__mul__", "/": "__div__", "/,": lambda val: chain_attempts(lambda: val("__floordiv__"), lambda: lambda a: floor(val("__div__")(a))), "%": "__mod__"}))
+		return fold(node, get_reducers({"*": "__mul__", "/": "__truediv__", "/,": lambda val: chain_attempts(lambda: val("__floordiv__"), lambda: lambda a: floor(val("__div__")(a))), "%": "__mod__"}))
 	elif node.grammar_name == "Sum":
 		return fold(node, get_reducers({"+": "__add__", "-": "__sub__"}))
 	elif node.grammar_name == "Value":
 		return evaluate(node[0])
+	elif node.grammar_name == "Bracketed":
+		return evaluate(node[1])
 	elif node.grammar_name == "Identifier":
 		name = str(node)
 		for subscope in scope[::-1]:
@@ -247,7 +279,7 @@ def global_eval(node, nest_level = 0, scope = [global_scope]):
 	elif node.grammar_name == "OctalNumber":
 		return base_convert(str(node)[1:].lower(), 8)
 	elif node.grammar_name == "DecimalNumber":
-		return to_float(str(node))
+		return base_convert(str(node).lower(), 10)
 	elif node.grammar_name == "String":
 		return ProtonObject(ast.literal_eval(str(node)))
 
@@ -291,15 +323,32 @@ Expression.grammar_resolve_refs()
 
 grammar_whitespace_mode = "optional"
 
-if len(sys.argv) > 1:
+def prettyprint(node, indent = 0):
+	print(indent * "    " + repr(node))
 	try:
-		global_eval(Program.parser().parse_string(remove_comments(open(sys.argv[1], "r").read().strip())))
+		for n in node:
+			prettyprint(n, indent + 1)
+	except:
+		pass
+
+def _print(val):
+	if val is not None:
+		print(val)
+
+if file:
+	try:
+		global_eval(Program.parser().parse_string(remove_comments(open(file, "r").read().strip())))
+	except RecursionError:
+		sys.stderr.write("RecursionError - Likely caused by incomplete parsing - check your statements\n")
+elif code:
+	try:
+		global_eval(Program.parser().parse_string(remove_comments(code.strip())))
 	except RecursionError:
 		sys.stderr.write("RecursionError - Likely caused by incomplete parsing - check your statements\n")
 else:
 	while True:
 		try:
-			print(global_eval(Program.parser().parse_string(remove_comments(input().strip()))))
+			_print(global_eval(Program.parser().parse_string(remove_comments(input().strip()))))
 		except KeyboardInterrupt:
 			print("\b\b  \nKeyboardInterrupt")
 		except EOFError:
