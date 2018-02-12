@@ -98,10 +98,10 @@ class Expression(Grammar):
 	grammar = Expr | Assignment | _expr
 
 class Statement(Grammar):
-	grammar = (Expression, OPTIONAL(";"))
+	grammar = (Expression)
 
 class Program(Grammar):
-	grammar = REPEAT(Statement, grammar_whitespace_mode = "optional")
+	grammar = LIST_OF(Statement, sep = (ZERO_OR_MORE(SPACE), L(";") | L("\n") | (L(";"), ZERO_OR_MORE(SPACE), L("\n")), ZERO_OR_MORE(SPACE)), grammar_whitespace_mode = "explicit")
 
 class GetterWrapper:
 	def __init__(self, object = None):
@@ -200,7 +200,7 @@ def global_eval(node, nest_level = 0, scope = [global_scope]):
 				values[0] = ProtonObject(reducers[operators.pop(0)](values[0])(values[i].parent.object))
 			return values[0]
 	if node.grammar_name == "Program":
-		return list(map(evaluate, node[0]))
+		return list(map(evaluate, list(node[0])[::2]))
 	elif node.grammar_name == "Statement":
 		return evaluate(node[0])
 	elif node.grammar_name == "Expression":
@@ -292,11 +292,14 @@ Expression.grammar_resolve_refs()
 grammar_whitespace_mode = "optional"
 
 if len(sys.argv) > 1:
-	global_eval(Program.parser().parse_string(remove_comments(open(sys.argv[1], "r").read().strip())))
+	try:
+		global_eval(Program.parser().parse_string(remove_comments(open(sys.argv[1], "r").read().strip())))
+	except RecursionError:
+		sys.stderr.write("RecursionError - Likely caused by incomplete parsing - check your statements\n")
 else:
 	while True:
 		try:
-			print(global_eval(Program.parser().parse_string(remove_comments(input(">>> ")))))
+			print(global_eval(Program.parser().parse_string(remove_comments(input().strip()))))
 		except KeyboardInterrupt:
 			print("\b\b  \nKeyboardInterrupt")
 		except EOFError:
