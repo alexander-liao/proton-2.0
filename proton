@@ -9,13 +9,13 @@ args = []
 file = ""
 code = ""
 
-flags = {"--sympy": 0, "c": 0}
+flags = {"--sympy": 0, "--parse": 0, "c": 0}
 
 i = 1
 
 while i < len(sys.argv):
 	arg = sys.argv[i]
-	if arg and arg[0] == "-":
+	if arg and arg[0] == "-" and arg[1:] and arg[1] != "-":
 		for a in arg[1:]:
 			if a in flags:
 				num = flags[a]
@@ -30,10 +30,13 @@ while i < len(sys.argv):
 	i += 1
 
 sympy = False
+parse = False
 
 for flag in args:
 	if flag[0] == "--sympy":
 		sympy = True
+	elif flag[0] == "--parse":
+		parse = True
 	elif flag[0] == "c":
 		code, file = file, ""
 
@@ -76,7 +79,7 @@ class HexNumber(Grammar):
 	grammar = (L("0") | (NZD, OPTIONAL(WORD("0-9"))), "x", number_format("0123456789abcdefABCDEF"))
 
 class String(Grammar):
-	grammar = OR(("\"", ZERO_OR_MORE(OR(ANY_EXCEPT("\""), ("\\", ANY))), "\""), ("'", REPEAT(OR(ANY_EXCEPT("'"), ("\\", ANY), "'"))))
+	grammar = OR(("\"", ZERO_OR_MORE(OR(ANY_EXCEPT("\""), ("\\", ANY))), "\""), ("\'", ZERO_OR_MORE(OR(ANY_EXCEPT("\'"), ("\\", ANY), "\'")), "\'"))
 
 class Number(Grammar):
 	grammar = (OPTIONAL("-"), DecimalNumber | BinaryNumber | HexNumber | ExtOctalNumber | OctalNumber, OPTIONAL("j"))
@@ -100,7 +103,7 @@ class FunctionPipeCall(Grammar):
 	grammar = LIST_OF(FunctionAtCall | Value, sep = "|>", grammar_whitespace_mode = "optional")
 
 class FunctionCall(Grammar):
-	grammar = (Bracketed | Identifier, "(", REF("Expression"), ")")
+	grammar = (Bracketed | Identifier, "(", LIST_OF(REF("Expression"), sep = ",", min = 0, grammar_whitespace_mode = "optional"), ")")
 
 class Exponent(Grammar):
 	grammar = LIST_OF(Value, sep = "**", grammar_whitespace_mode = "optional")
@@ -246,7 +249,7 @@ def global_eval(node, nest_level = 0, scope = [global_scope]):
 	elif node.grammar_name == "FunctionPipeCall":
 		return fold([list(node[0])[::-1]], get_reducers({"|>": "__call__"}), True)
 	elif node.grammar_name == "FunctionCall":
-		return ProtonObject(evaluate(node[0])("__call__")(evaluate(node[2]).parent.object))
+		return ProtonObject(evaluate(node[0])("__call__")(*[evaluate(n).parent.object for n in list(node[2])[::2]]))
 	elif node.grammar_name == "Exponent":
 		return fold(node, get_reducers({"**": "__pow__"}), True)
 	elif node.grammar_name == "Product":
@@ -335,20 +338,23 @@ def _print(val):
 	if val is not None:
 		print(val)
 
+mode = prettyprint if parse else global_eval
+
 if file:
 	try:
-		global_eval(Program.parser().parse_string(remove_comments(open(file, "r").read().strip())))
+		mode(Program.parser().parse_string(remove_comments(open(file, "r").read().strip())))
 	except RecursionError:
 		sys.stderr.write("RecursionError - Likely caused by incomplete parsing - check your statements\n")
 elif code:
 	try:
-		global_eval(Program.parser().parse_string(remove_comments(code.strip())))
+		mode(Program.parser().parse_string(remove_comments(code.strip())))
 	except RecursionError:
 		sys.stderr.write("RecursionError - Likely caused by incomplete parsing - check your statements\n")
 else:
 	while True:
 		try:
-			_print(global_eval(Program.parser().parse_string(remove_comments(input().strip()))))
+			mode = prettyprint if parse else lambda k: _print(global_eval(k))
+			mode(Program.parser().parse_string(remove_comments(input().strip())))
 		except KeyboardInterrupt:
 			print("\b\b  \nKeyboardInterrupt")
 		except EOFError:
