@@ -106,7 +106,7 @@ class FunctionCall(Grammar):
 	grammar = (Bracketed | Identifier, "(", LIST_OF(REF("Expression"), sep = ",", min = 0, grammar_whitespace_mode = "optional"), ")")
 
 class Slice(Grammar):
-	grammar = (OPTIONAL(REF("Expression")), ":", LIST_OF(OPTIONAL(REF("Expression")), sep = ":", grammar_whitespace_mode = "optional"))
+	grammar = (OPTIONAL(REF("Expression")), ":", OPTIONAL(OPTIONAL(REF("Expression")), ":", OPTIONAL(REF("Expression"))))
 
 class IndexAccessor(Grammar):
 	grammar = Slice | REF("Expression")
@@ -262,7 +262,7 @@ def global_eval(node, nest_level = 0, scope = [global_scope]):
 	elif node.grammar_name == "FunctionCall":
 		return ProtonObject(evaluate(node[0])("__call__")(*[evaluate(n).parent.object for n in list(node[2])[::2]]))
 	elif node.grammar_name == "Slice":
-		l = [node[0]] + list(node[2])[::2]
+		l = [node[0], node[2][0], node[2][2]]
 		intify = lambda k: int(k) if k is not None else None
 		return ProtonObject(slice(*[intify(evaluate(n).parent.object) for n in l]))
 	elif node.grammar_name == "IndexAccessor":
