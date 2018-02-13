@@ -105,14 +105,11 @@ class FunctionPipeCall(Grammar):
 class FunctionCall(Grammar):
 	grammar = (Bracketed | Identifier, "(", LIST_OF(REF("Expression"), sep = ",", min = 0, grammar_whitespace_mode = "optional"), ")")
 
-class OneSlice(Grammar):
-	grammar = (OPTIONAL(REF("Expression")), ":", OPTIONAL(REF("Expression")))
-
-class TwoSlice(Grammar):
-	grammar = (OPTIONAL(REF("Expression")), ":", OPTIONAL(REF("Expression")), ":", OPTIONAL(REF("Expression")))
+class Slice(Grammar):
+	grammar = LIST_OF(OPTIONAL(REF("Expression")), sep = ":", grammar_whitespace_mode = "optional")
 
 class IndexAccessor(Grammar):
-	grammar = OneSlice | TwoSlice | REF("Expression")
+	grammar = Slice | REF("Expression")
 
 class IndexAccess(Grammar):
 	grammar = (Value, "[", LIST_OF(IndexAccessor, sep = ",", grammar_whitespace_mode = "optional"), "]")
@@ -244,7 +241,9 @@ def global_eval(node, nest_level = 0, scope = [global_scope]):
 			for i in range(1, len(values)):
 				values[0] = ProtonObject(reducers[operators.pop(0)](values[0])(values[i].parent.object))
 			return values[0]
-	if node.grammar_name == "Program":
+	if node == None:
+		return ProtonObject(None)
+	elif node.grammar_name == "Program":
 		return list(map(evaluate, list(node[0])[::2]))
 	elif node.grammar_name == "Statement":
 		return evaluate(node[0])
@@ -263,14 +262,15 @@ def global_eval(node, nest_level = 0, scope = [global_scope]):
 	elif node.grammar_name == "FunctionCall":
 		return ProtonObject(evaluate(node[0])("__call__")(*[evaluate(n).parent.object for n in list(node[2])[::2]]))
 	elif node.grammar_name == "Slice":
-		return ProtonObject(slice(*[evaluate(n).parent.object for n in list(node[0])[::2]]))
+		intify = lambda k: int(k) if k is not None else None
+		return ProtonObject(slice(*[intify(evaluate(n).parent.object) for n in list(node[0])[::2]]))
 	elif node.grammar_name == "IndexAccessor":
 		v = evaluate(node[0])
 		if isinstance(v.parent.object, slice): return v
-		return int(v.parent.object)
+		return ProtonObject(int(v.parent.object))
 	elif node.grammar_name == "IndexAccess":
 		getter = evaluate(node[0])("__getitem__")
-		l = [getter(evaluate(n)) for n in list(node[2])[::2]]
+		l = [getter(evaluate(n).parent.object) for n in list(node[2])[::2]]
 		return ProtonObject(l[0] if len(l) == 1 else l)
 	elif node.grammar_name == "Exponent":
 		return fold(node, get_reducers({"**": "__pow__"}), True)
@@ -375,8 +375,8 @@ elif code:
 else:
 	while True:
 		try:
-			mode = prettyprint if parse else lambda k: _print(global_eval(k))
-			mode(Program.parser().parse_string(remove_comments(input().strip())))
+			mode = prettyprint if parse else lambda k: _print(global_eval(k)[-1])
+			mode(Program.parser().parse_string(remove_comments(input(">>> ").strip())))
 		except KeyboardInterrupt:
 			print("\b\b  \nKeyboardInterrupt")
 		except EOFError:
