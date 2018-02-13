@@ -214,7 +214,7 @@ def floor(val):
 	except:
 		return val - val % 1
 
-global_scope = {"print": ProtonObject(print), "input": ProtonObject(input), "int": ProtonObject(int), "test": ProtonObject([1, 2, 3])}
+global_scope = {"print": ProtonObject(print), "input": ProtonObject(input), "int": ProtonObject(int), "test": ProtonObject([ProtonObject(to_float(1)), ProtonObject(to_float(2)), ProtonObject(to_float(3))])}
 
 def assn(node, val, scope):
 	if node.grammar_name == "Identifier":
