@@ -96,32 +96,38 @@ class Bracketed(Grammar):
 class Value(Grammar):
 	grammar = Identifier | Literal | Bracketed
 
-class FunctionAtCall(Grammar):
-	grammar = LIST_OF(REF("FunctionCall") | REF("IndexAccess") | Value, sep = "@", grammar_whitespace_mode = "optional")
-
-class FunctionPipeCall(Grammar):
-	grammar = LIST_OF(FunctionAtCall | Value, sep = "|>", grammar_whitespace_mode = "optional")
-
-class FunctionCall(Grammar):
-	grammar = (Bracketed | Identifier, "(", LIST_OF(REF("Expression"), sep = ",", min = 0, grammar_whitespace_mode = "optional"), ")")
-
 class Slice(Grammar):
-	grammar = (OPTIONAL(REF("Expression")), ":", OPTIONAL(OPTIONAL(REF("Expression")), ":", OPTIONAL(REF("Expression"))))
+	grammar = (OPTIONAL(REF("Expression")), ":", OPTIONAL(REF("Expression")), OPTIONAL(":", OPTIONAL(REF("Expression"))))
 
 class IndexAccessor(Grammar):
 	grammar = Slice | REF("Expression")
 
 class IndexAccess(Grammar):
-	grammar = (Value, "[", IndexAccessor, "]")
+	grammar = (Value, "[", OPTIONAL(IndexAccessor), "]")
+
+class FunctionCall(Grammar):
+	grammar = (Bracketed | Identifier, "(", LIST_OF(REF("Expression"), sep = ",", min = 0, grammar_whitespace_mode = "optional"), ")")
+
+class FunctionAtCall(Grammar):
+	grammar = LIST_OF(FunctionCall | IndexAccess | Value, sep = "@", grammar_whitespace_mode = "optional")
+
+class IndexHashAccess(Grammar):
+	grammar = LIST_OF(FunctionAtCall, sep = "#", grammar_whitespace_mode = "optional")
 
 class Exponent(Grammar):
-	grammar = LIST_OF(Value, sep = "**", grammar_whitespace_mode = "optional")
+	grammar = LIST_OF(IndexHashAccess, sep = "**", grammar_whitespace_mode = "optional")
 
 class Product(Grammar):
-	grammar = LIST_OF(Value, sep = OR("*", "/", "/,", "%"), grammar_whitespace_mode = "optional")
+	grammar = LIST_OF(Exponent, sep = OR("*", "/", "/,", "%", "/@"), grammar_whitespace_mode = "optional")
 
 class Sum(Grammar):
-	grammar = LIST_OF(Value, sep = OR("+", "-"), grammar_whitespace_mode = "optional")
+	grammar = LIST_OF(Product, sep = OR("+", "-"), grammar_whitespace_mode = "optional")
+
+class FunctionTildeCall(Grammar):
+	grammar = LIST_OF(Sum, sep = "~", grammar_whitespace_mode = "optional")
+
+class FunctionPipeCall(Grammar):
+	grammar = LIST_OF(FunctionTildeCall, sep = "|>", grammar_whitespace_mode = "optional")
 
 class Assignable(Grammar):
 	grammar = Identifier
@@ -257,12 +263,14 @@ def global_eval(node, nest_level = 0, scope = [global_scope]):
 		return assign(list(node[0])[::2] + [node[2]], scope)
 	elif node.grammar_name == "FunctionAtCall":
 		return fold(node, get_reducers({"@": "__call__"}), True)
+	elif node.grammar_name == "IndexHashAccess":
+		return fold(node, get_reducers({"#": lambda v: lambda w: v("__getitem__")(int(w) if w != None else slice(None))}))
 	elif node.grammar_name == "FunctionPipeCall":
 		return fold([list(node[0])[::-1]], get_reducers({"|>": "__call__"}), True)
 	elif node.grammar_name == "FunctionCall":
 		return ProtonObject(evaluate(node[0])("__call__")(*[evaluate(n).parent.object for n in list(node[2])[::2]]))
 	elif node.grammar_name == "Slice":
-		l = [node[0], node[2][0], node[2][2]]
+		l = [node[0], node[2], node[3][1] if node[3] else node[3]]
 		intify = lambda k: int(k) if k is not None else None
 		return ProtonObject(slice(*[intify(evaluate(n).parent.object) for n in l]))
 	elif node.grammar_name == "IndexAccessor":
@@ -270,13 +278,11 @@ def global_eval(node, nest_level = 0, scope = [global_scope]):
 		if isinstance(v.parent.object, slice): return v
 		return ProtonObject(int(v.parent.object))
 	elif node.grammar_name == "IndexAccess":
-		getter = evaluate(node[0])("__getitem__")
-		l = [getter(evaluate(n).parent.object) for n in list(node[2])[::2]]
-		return ProtonObject(l[0] if len(l) == 1 else l)
+		return ProtonObject(evaluate(node[0])("__getitem__")(evaluate(node[2]).parent.object or slice(None)))
 	elif node.grammar_name == "Exponent":
 		return fold(node, get_reducers({"**": "__pow__"}), True)
 	elif node.grammar_name == "Product":
-		return fold(node, get_reducers({"*": "__mul__", "/": "__truediv__", "/,": lambda val: chain_attempts(lambda: val("__floordiv__"), lambda: lambda a: floor(val("__div__")(a))), "%": "__mod__"}))
+		return fold(node, get_reducers({"*": "__mul__", "/": "__truediv__", "/,": lambda val: chain_attempts(lambda: val("__floordiv__"), lambda: lambda a: floor(val("__div__")(a))), "%": "__mod__", "/@": lambda val: lambda array: (lambda getter: [ProtonObject(getter(element)) for element in array])(val("__call__"))}))
 	elif node.grammar_name == "Sum":
 		return fold(node, get_reducers({"+": "__add__", "-": "__sub__"}))
 	elif node.grammar_name == "Value":
