@@ -351,8 +351,6 @@ def remove_comments(string):
 			i += 1
 	return output
 
-Expression.grammar_resolve_refs()
-
 grammar_whitespace_mode = "optional"
 
 def prettyprint(node, indent = 0):
