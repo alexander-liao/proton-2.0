@@ -64,7 +64,7 @@ def number_format(digits):
 	return OR((g, ".", g), (OPTIONAL("."), g))
 
 class DecimalNumber(Grammar):
-	grammar = OR(("0", ".", WORD("0-9")), (NZD, OPTIONAL(number_format("0123456789"))))
+	grammar = OR(("0", ".", WORD("0-9")), (NZD, OPTIONAL(number_format("0123456789"))), "0")
 
 class OctalNumber(Grammar):
 	grammar = ("0", number_format("01234567"))
@@ -262,10 +262,16 @@ def global_eval(node, nest_level = 0, scope = [global_scope]):
 		return fold([list(node[0])[::-1]], get_reducers({"|>": "__call__"}), True)
 	elif node.grammar_name == "FunctionCall":
 		return ProtonObject(evaluate(node[0])("__call__")(*[evaluate(n).parent.object for n in list(node[2])[::2]]))
+	elif node.grammar_name == "Slice":
+		return ProtonObject(slice(*[evaluate(n).parent.object for n in list(node[0])[::2]]))
+	elif node.grammar_name == "IndexAccessor":
+		v = evaluate(node[0])
+		if isinstance(v.parent.object, slice): return v
+		return int(v.parent.object)
 	elif node.grammar_name == "IndexAccess":
-		getter = evaluate(node[0])("__call__")
-		l = [getter(evaluate(n)) for n in list(node[3])[::2]]
-		return l[0] if len(l) == 0 else l
+		getter = evaluate(node[0])("__getitem__")
+		l = [getter(evaluate(n)) for n in list(node[2])[::2]]
+		return ProtonObject(l[0] if len(l) == 1 else l)
 	elif node.grammar_name == "Exponent":
 		return fold(node, get_reducers({"**": "__pow__"}), True)
 	elif node.grammar_name == "Product":
