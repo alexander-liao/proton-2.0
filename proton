@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import sys, math, traceback, ast
+import sys, math, traceback, ast, operator
 
 from fractions import *
 from modgrammar import *
@@ -129,6 +129,21 @@ class FunctionTildeCall(Grammar):
 class FunctionPipeCall(Grammar):
 	grammar = LIST_OF(FunctionTildeCall, sep = "|>", grammar_whitespace_mode = "optional")
 
+class List(Grammar):
+	grammar = OR(("[", OR(REF("Tuple"), REF("Expression")), "]"), ("[", "]"))
+
+class Set(Grammar):
+	grammar = ("{", OR(REF("Tuple"), REF("Expression")), "}")
+
+class DictEntry(Grammar):
+	grammar = (REF("Expression"), ":", REF("Expression"))
+
+class Dict(Grammar):
+	grammar = ("{", LIST_OF(DictEntry, sep = ",", grammar_whitespace_mode = "optional"), "}")
+
+class Tuple(Grammar):
+	grammar = LIST_OF(OPTIONAL(FunctionPipeCall | List | Set | Dict), sep = ",", grammar_whitespace_mode = "optional")
+
 class Assignable(Grammar):
 	grammar = Identifier
 
@@ -137,7 +152,7 @@ class Assignment(Grammar):
 	grammar_whitespace_mode = "optional"
 
 class _expr(Grammar):
-	grammar = Sum | Product | Exponent | FunctionAtCall | FunctionPipeCall | FunctionCall | Value
+	grammar = List | Dict | Set | Tuple
 
 class Expr(Grammar):
 	grammar = ("(", Assignment | _expr, ")")
@@ -177,6 +192,10 @@ class ProtonObject:
 		return str(self.parent)
 	def __repr__(self):
 		return repr(self.parent)
+	def __eq__(self, other):
+		return isinstance(other, ProtonObject) and self.parent.object == other.parent.object
+	def __hash__(self):
+		return hash(self.parent.object)
 
 def base_convert(string, base, indexstr = None):
 	if "." in string or indexstr:
@@ -214,7 +233,11 @@ def floor(val):
 	except:
 		return val - val % 1
 
-global_scope = {"print": ProtonObject(print), "input": ProtonObject(input), "int": ProtonObject(int), "test": ProtonObject([ProtonObject(to_float(1)), ProtonObject(to_float(2)), ProtonObject(to_float(3))])}
+global_scope = {
+	"print": ProtonObject(print),
+	"input": ProtonObject(input),
+	"int": ProtonObject(int)
+}
 
 def assn(node, val, scope):
 	if node.grammar_name == "Identifier":
@@ -264,21 +287,50 @@ def global_eval(node, nest_level = 0, scope = [global_scope]):
 	elif node.grammar_name == "FunctionAtCall":
 		return fold(node, get_reducers({"@": "__call__"}), True)
 	elif node.grammar_name == "IndexHashAccess":
-		return fold(node, get_reducers({"#": lambda v: lambda w: v("__getitem__")(int(w) if w != None else slice(None))}))
+		return fold(node, get_reducers({"#": lambda v: lambda w: v("__getitem__")(w if w != None else slice(None))}))
+	elif node.grammar_name == "FunctionTildeCall":
+		nodes = list(node[0])[::2]
+		if len(nodes) % 2 == 0:
+			raise RuntimeError("Cannot properly interpret the meaning of an even number of expressions in a chained tilde function call")
+		else:
+			values = list(map(evaluate, nodes))
+			values[::2] = [e.parent.object for e in values[::2]]
+			while len(values) != 1:
+				values[:3] = [values[1]("__call__")(values[0], values[2])]
+			return ProtonObject(values[0])
+	elif node.grammar_name == "Dict":
+		return ProtonObject({evaluate(sub[0]): evaluate(sub[2]) for sub in list(node[1])[::2]})
+	elif node.grammar_name == "List":
+		if str(node) == "[]":
+			return ProtonObject([])
+		else:
+			listify = lambda l: chain_attempts(lambda: list(l), lambda: [l])
+			return ProtonObject(listify(evaluate(node[0][1]).parent.object))
+	elif node.grammar_name == "Set":
+		setify = lambda s: chain_attempts(lambda: set(s), lambda: {s})
+		return ProtonObject(setify(evaluate(node[1]).parent.object))
+	elif node.grammar_name == "Tuple":
+		nodes = list(node[0])[::2]
+		if any(n is None for n in nodes[:-1]):
+			raise RuntimeError("Can't have two commas next to each other; the only optional argument allowed is the last one")
+		if nodes[-1] is None:
+			return ProtonObject(tuple(map(evaluate, nodes[:-1])))
+		elif len(nodes) != 1:
+			return ProtonObject(tuple(map(evaluate, nodes)))
+		else:
+			return evaluate(nodes[0])
 	elif node.grammar_name == "FunctionPipeCall":
 		return fold([list(node[0])[::-1]], get_reducers({"|>": "__call__"}), True)
 	elif node.grammar_name == "FunctionCall":
 		return ProtonObject(evaluate(node[0])("__call__")(*[evaluate(n).parent.object for n in list(node[2])[::2]]))
 	elif node.grammar_name == "Slice":
 		l = [node[0], node[2], node[3][1] if node[3] else node[3]]
-		intify = lambda k: int(k) if k is not None else None
-		return ProtonObject(slice(*[intify(evaluate(n).parent.object) for n in l]))
+		return ProtonObject(slice(*[(evaluate(n).parent.object) for n in l]))
 	elif node.grammar_name == "IndexAccessor":
-		v = evaluate(node[0])
-		if isinstance(v.parent.object, slice): return v
-		return ProtonObject(int(v.parent.object))
+		return evaluate(node[0])
 	elif node.grammar_name == "IndexAccess":
-		return ProtonObject(evaluate(node[0])("__getitem__")(evaluate(node[2]).parent.object or slice(None)))
+		val = evaluate(node[2]).parent.object
+		return ProtonObject(evaluate(node[0])("__getitem__")(val if val is not None else slice(None)))
 	elif node.grammar_name == "Exponent":
 		return fold(node, get_reducers({"**": "__pow__"}), True)
 	elif node.grammar_name == "Product":
@@ -362,8 +414,8 @@ def prettyprint(node, indent = 0):
 		pass
 
 def _print(val):
-	if val is not None:
-		print(val)
+	if isinstance(val, list) and val and val[-1].parent.object is not None:
+		print(val[-1])
 
 mode = prettyprint if parse else global_eval
 
@@ -380,7 +432,7 @@ elif code:
 else:
 	while True:
 		try:
-			mode = prettyprint if parse else lambda k: _print(global_eval(k)[-1])
+			mode = prettyprint if parse else lambda k: _print(global_eval(k))
 			mode(Program.parser().parse_string(remove_comments(input(">>> ").strip())))
 		except KeyboardInterrupt:
 			print("\b\b  \nKeyboardInterrupt")
