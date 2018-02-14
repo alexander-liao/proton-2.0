@@ -1,1 +1,2 @@
-
+i = int@input@'Enter your number here >>> '
+print@i
