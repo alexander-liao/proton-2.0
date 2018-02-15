@@ -109,7 +109,7 @@ class IndexAccessor(Grammar):
 	grammar = Slice | REF("Expression")
 
 class IndexAccess(Grammar):
-	grammar = (Value, "[", OPTIONAL(IndexAccessor), "]")
+	grammar = (Value, "[", OPTIONAL(LIST_OF(IndexAccessor, sep = ",", grammar_whitespace_mode = "optional")), "]")
 
 class FunctionCall(Grammar):
 	grammar = (Bracketed | Identifier, "(", LIST_OF(REF("Expression"), sep = ",", min = 0, grammar_whitespace_mode = "optional"), ")")
@@ -253,7 +253,8 @@ def floor(val):
 global_scope = {
 	"print": ProtonObject(print),
 	"input": ProtonObject(input),
-	"int": ProtonObject(int)
+	"int": ProtonObject(lambda i: to_float(int(i))),
+    "float": ProtonObject(to_float),
 }
 
 def assn(node, val, scope):

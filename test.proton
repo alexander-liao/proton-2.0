@@ -1,2 +1,3 @@
 i = int@input@'Enter your number here >>> '
-print@i
+if (i < 0) print@"Your number was negative!" else if (i > 0) print@"Your number was positive!" else print@"Your number was zero!"
+
