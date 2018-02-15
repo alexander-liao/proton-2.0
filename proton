@@ -78,17 +78,14 @@ class ExtOctalNumber(Grammar):
 class HexNumber(Grammar):
 	grammar = (L("0") | (NZD, OPTIONAL(WORD("0-9"))), "x", number_format("0123456789abcdefABCDEF"))
 
+class SingleString(Grammar):
+    grammar = ("\'", ZERO_OR_MORE(OR(("\\", ANY), ANY_EXCEPT("\'"))), "\'")
+
+class DoubleString(Grammar):
+    grammar = ("\"", ZERO_OR_MORE(OR(("\\", ANY), ANY_EXCEPT("\""))), "\"")
+
 class String(Grammar):
-	grammar = OR(
-		("\"", ZERO_OR_MORE(OR(
-			ANY_EXCEPT("\""),
-			("\\", ANY)
-		)), "\""),
-		("\'", ZERO_OR_MORE(OR(
-			ANY_EXCEPT("\'"),
-			("\\", ANY)
-		)), "\'")
-	)
+    grammar = SingleString | DoubleString
 
 class Number(Grammar):
 	grammar = (OPTIONAL("-"), DecimalNumber | BinaryNumber | HexNumber | ExtOctalNumber | OctalNumber, OPTIONAL("j"))
@@ -118,7 +115,7 @@ class FunctionCall(Grammar):
 	grammar = (Bracketed | Identifier, "(", LIST_OF(REF("Expression"), sep = ",", min = 0, grammar_whitespace_mode = "optional"), ")")
 
 class FunctionAtCall(Grammar):
-	grammar = LIST_OF(FunctionCall | IndexAccess | Value, sep = "@", grammar_whitespace_mode = "optional")
+	grammar = LIST_OF(FunctionCall | Value | IndexAccess, sep = "@", grammar_whitespace_mode = "optional")
 
 class IndexHashAccess(Grammar):
 	grammar = LIST_OF(FunctionAtCall, sep = "#", grammar_whitespace_mode = "optional")
@@ -172,7 +169,7 @@ class For(Grammar):
 	grammar_whitespace_mode = "optional"
 
 class _expr(Grammar):
-	grammar = If | List | Dict | Set | Tuple
+	grammar = If | For | List | Dict | Set | Tuple
 
 class Expr(Grammar):
 	grammar = ("(", Assignment | _expr, ")")
