@@ -9,7 +9,7 @@ args = []
 file = ""
 code = ""
 
-flags = {"--sympy": 0, "--parse": 0, "c": 0}
+flags = {"--sympy": 0, "--parse": 0, "c": 0, "--subparser": 1}
 
 i = 1
 
@@ -31,12 +31,15 @@ while i < len(sys.argv):
 
 sympy = False
 parse = False
+parser = "Program"
 
 for flag in args:
 	if flag[0] == "--sympy":
 		sympy = True
 	elif flag[0] == "--parse":
 		parse = True
+	elif flag[0] == "--subparser":
+		parser = flag[1][0]
 	elif flag[0] == "c":
 		code, file = file, ""
 
@@ -79,13 +82,13 @@ class HexNumber(Grammar):
 	grammar = (L("0") | (NZD, OPTIONAL(WORD("0-9"))), "x", number_format("0123456789abcdefABCDEF"))
 
 class SingleString(Grammar):
-    grammar = ("\'", ZERO_OR_MORE(OR(("\\", ANY), ANY_EXCEPT("\'"))), "\'")
+	grammar = ("\'", ZERO_OR_MORE(OR(("\\", ANY), ANY_EXCEPT("\'"))), "\'")
 
 class DoubleString(Grammar):
-    grammar = ("\"", ZERO_OR_MORE(OR(("\\", ANY), ANY_EXCEPT("\""))), "\"")
+	grammar = ("\"", ZERO_OR_MORE(OR(("\\", ANY), ANY_EXCEPT("\""))), "\"")
 
 class String(Grammar):
-    grammar = SingleString | DoubleString
+	grammar = SingleString | DoubleString
 
 class Number(Grammar):
 	grammar = (OPTIONAL("-"), DecimalNumber | BinaryNumber | HexNumber | ExtOctalNumber | OctalNumber, OPTIONAL("j"))
@@ -109,13 +112,13 @@ class IndexAccessor(Grammar):
 	grammar = Slice | REF("Expression")
 
 class IndexAccess(Grammar):
-	grammar = (Value, "[", OPTIONAL(LIST_OF(IndexAccessor, sep = ",", grammar_whitespace_mode = "optional")), "]")
+	grammar = (Value, ZERO_OR_MORE("[", OPTIONAL(LIST_OF(IndexAccessor, sep = ",", grammar_whitespace_mode = "optional")), "]"))
 
 class FunctionCall(Grammar):
 	grammar = (Bracketed | Identifier, "(", LIST_OF(REF("Expression"), sep = ",", min = 0, grammar_whitespace_mode = "optional"), ")")
 
 class FunctionAtCall(Grammar):
-	grammar = LIST_OF(FunctionCall | Value | IndexAccess, sep = "@", grammar_whitespace_mode = "optional")
+	grammar = LIST_OF(FunctionCall | IndexAccess, sep = "@", grammar_whitespace_mode = "optional")
 
 class IndexHashAccess(Grammar):
 	grammar = LIST_OF(FunctionAtCall, sep = "#", grammar_whitespace_mode = "optional")
@@ -214,6 +217,31 @@ class ProtonObject:
 	def __hash__(self):
 		return hash(self.parent.object)
 
+class ProtonList:
+	def __init__(self, elements):
+		self.elements = list(elements)
+	def __getitem__(self, index):
+		if hasattr(index, "__iter__") and not isinstance(index, str):
+			return ProtonObject(type(index)([ProtonObject(self[sub.parent.object]) for sub in index]))
+		else:
+			if isinstance(index, slice):
+				if (index.start is not None and index.start % 1) or (index.stop is not None and index.stop % 1) or (index.step is not None and index.step % 1):
+					raise RuntimeError("Slice indices must be integers or None")
+				else:
+					intify = lambda l: None if l is None else intify(l)
+					return self.elements[intify(index.start):intify(index.stop):intify(index.step)]
+			else:
+				if index % 1:
+					return (self.elements[int(index)], self.elements[int(index + 1)])
+				else:
+					return self.elements[int(index)]
+	def __iter__(self):
+		return iter(self.elements)
+	def __str__(self):
+		return str(self.elements)
+	def __repr__(self):
+		return repr(self.elements)
+
 def base_convert(string, base, indexstr = None):
 	if "." in string or indexstr:
 		indexstr = indexstr or "0123456789abcdefghijklmnopqrstuvwxyz"
@@ -254,7 +282,7 @@ global_scope = {
 	"print": ProtonObject(print),
 	"input": ProtonObject(input),
 	"int": ProtonObject(lambda i: to_float(int(i))),
-    "float": ProtonObject(to_float),
+	"float": ProtonObject(to_float),
 }
 
 def assn(node, val, scope):
@@ -329,9 +357,9 @@ def global_eval(node, nest_level = 0, scope = [global_scope]):
 		return ProtonObject({evaluate(sub[0]): evaluate(sub[2]) for sub in list(node[1])[::2]})
 	elif node.grammar_name == "List":
 		if str(node) == "[]":
-			return ProtonObject([])
+			return ProtonObject(ProtonList([]))
 		else:
-			listify = lambda l: chain_attempts(lambda: list(l), lambda: [l])
+			listify = lambda l: chain_attempts(lambda: ProtonList(l), lambda: ProtonList([l]))
 			return ProtonObject(listify(evaluate(node[0][1]).parent.object))
 	elif node.grammar_name == "Set":
 		setify = lambda s: chain_attempts(lambda: set(s), lambda: {s})
@@ -371,8 +399,14 @@ def global_eval(node, nest_level = 0, scope = [global_scope]):
 	elif node.grammar_name == "IndexAccessor":
 		return evaluate(node[0])
 	elif node.grammar_name == "IndexAccess":
-		val = evaluate(node[2]).parent.object
-		return ProtonObject(evaluate(node[0])("__getitem__")(val if val is not None else slice(None)))
+		val = evaluate(node[0])
+		for subnode in node[1]:
+			indexlist = list(map(evaluate, list(subnode[1][0][0][0][0][0] if subnode[1][0][0][0][0].grammar_name == "Tuple" else subnode[1])[::2]))
+			if indexlist == []: val = ProtonObject(evaluate(node[0]).parent.object[:])
+			val = evaluate(node[0])
+			for index in indexlist:
+				val = val("__getitem__")(index.parent.object)
+		return val
 	elif node.grammar_name == "Exponent":
 		return fold(node, get_reducers({"**": "__pow__"}), True)
 	elif node.grammar_name == "Product":
@@ -448,7 +482,7 @@ def remove_comments(string):
 grammar_whitespace_mode = "optional"
 
 def prettyprint(node, indent = 0):
-	print(indent * "    " + repr(node))
+	print(indent * " " + repr(node))
 	try:
 		for n in node:
 			prettyprint(n, indent + 1)
@@ -461,21 +495,23 @@ def _print(val):
 
 mode = prettyprint if parse else global_eval
 
+parser = globals()[parser]
+
 if file:
 	try:
-		mode(Program.parser().parse_string(remove_comments(open(file, "r").read().strip())))
+		mode(parser.parser().parse_string(remove_comments(open(file, "r").read().strip())))
 	except RecursionError:
 		sys.stderr.write("RecursionError - Likely caused by incomplete parsing - check your statements\n")
 elif code:
 	try:
-		mode(Program.parser().parse_string(remove_comments(code.strip())))
+		mode(parser.parser().parse_string(remove_comments(code.strip())))
 	except RecursionError:
 		sys.stderr.write("RecursionError - Likely caused by incomplete parsing - check your statements\n")
 else:
 	while True:
 		try:
 			mode = prettyprint if parse else lambda k: _print(global_eval(k))
-			mode(Program.parser().parse_string(remove_comments(input(">>> ").strip())))
+			mode(parser.parser().parse_string(remove_comments(input(">>> ").strip())))
 		except KeyboardInterrupt:
 			print("\b\b  \nKeyboardInterrupt")
 		except EOFError:
