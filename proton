@@ -14,509 +14,526 @@ flags = {"--sympy": 0, "--parse": 0, "c": 0, "--subparser": 1}
 i = 1
 
 while i < len(sys.argv):
-	arg = sys.argv[i]
-	if arg and arg[0] == "-" and arg[1:] and arg[1] != "-":
-		for a in arg[1:]:
-			if a in flags:
-				num = flags[a]
-				args.append((a, sys.argv[i + 1:][:num]))
-				i += num
-	elif arg in flags:
-		num = flags[arg]
-		args.append((arg, sys.argv[i + 1:][:num]))
-		i += num
-	else:
-		file = arg
-	i += 1
+    arg = sys.argv[i]
+    if arg and arg[0] == "-" and arg[1:] and arg[1] != "-":
+        for a in arg[1:]:
+            if a in flags:
+                num = flags[a]
+                args.append((a, sys.argv[i + 1:][:num]))
+                i += num
+    elif arg in flags:
+        num = flags[arg]
+        args.append((arg, sys.argv[i + 1:][:num]))
+        i += num
+    else:
+        file = arg
+    i += 1
 
 sympy = False
 parse = False
 parser = "Program"
 
 for flag in args:
-	if flag[0] == "--sympy":
-		sympy = True
-	elif flag[0] == "--parse":
-		parse = True
-	elif flag[0] == "--subparser":
-		parser = flag[1][0]
-	elif flag[0] == "c":
-		code, file = file, ""
+    if flag[0] == "--sympy":
+        sympy = True
+    elif flag[0] == "--parse":
+        parse = True
+    elif flag[0] == "--subparser":
+        parser = flag[1][0]
+    elif flag[0] == "c":
+        code, file = file, ""
 
 if sympy: import sympy
 else: import mpmath
 
 if sympy:
-	to_float = sympy.Rational
-	to_complex = lambda a, b: sympy.Rational(a) + sympy.Rational(b) * sympy.I
+    to_float = sympy.Rational
+    to_complex = lambda a, b: sympy.Rational(a) + sympy.Rational(b) * sympy.I
 else:
-	to_float = mpmath.mpf
-	to_complex = mpmath.mpc
+    to_float = mpmath.mpf
+    to_complex = mpmath.mpc
 
 class NZD(Grammar):
-	grammar = L("1") | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"
+    grammar = L("1") | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"
 
 class HexDigit(Grammar):
-	grammar = L("0") | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "a" | "A" | "b" | "B" | "c" | "C" | "d" | "D" | "e" | "E" | "f" | "F"
+    grammar = L("0") | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "a" | "A" | "b" | "B" | "c" | "C" | "d" | "D" | "e" | "E" | "f" | "F"
 
 def number_format(digits):
-	g = L(digits[0])
-	for i in digits[1:]:
-		g |= i
-	g = REPEAT(g)
-	return OR((g, ".", g), (OPTIONAL("."), g))
+    g = L(digits[0])
+    for i in digits[1:]:
+        g |= i
+    g = REPEAT(g)
+    return OR((g, ".", g), (OPTIONAL("."), g))
 
 class DecimalNumber(Grammar):
-	grammar = OR(("0", ".", WORD("0-9")), (NZD, OPTIONAL(number_format("0123456789"))), "0")
+    grammar = OR(("0", ".", WORD("0-9")), (NZD, OPTIONAL(number_format("0123456789"))), "0")
 
 class OctalNumber(Grammar):
-	grammar = ("0", number_format("01234567"))
+    grammar = ("0", number_format("01234567"))
 
 class BinaryNumber(Grammar):
-	grammar = (L("0") | (NZD, OPTIONAL(WORD("0-9"))), "b", number_format("01"))
+    grammar = (L("0") | (NZD, OPTIONAL(WORD("0-9"))), "b", number_format("01"))
 
 class ExtOctalNumber(Grammar):
-	grammar = (L("0") | (NZD, OPTIONAL(WORD("0-9"))), "o", number_format("01234567"))
+    grammar = (L("0") | (NZD, OPTIONAL(WORD("0-9"))), "o", number_format("01234567"))
 
 class HexNumber(Grammar):
-	grammar = (L("0") | (NZD, OPTIONAL(WORD("0-9"))), "x", number_format("0123456789abcdefABCDEF"))
+    grammar = (L("0") | (NZD, OPTIONAL(WORD("0-9"))), "x", number_format("0123456789abcdefABCDEF"))
 
 class SingleString(Grammar):
-	grammar = ("\'", ZERO_OR_MORE(OR(("\\", ANY), ANY_EXCEPT("\'"))), "\'")
+    grammar = ("\'", ZERO_OR_MORE(OR(("\\", ANY), ANY_EXCEPT("\'"))), "\'")
 
 class DoubleString(Grammar):
-	grammar = ("\"", ZERO_OR_MORE(OR(("\\", ANY), ANY_EXCEPT("\""))), "\"")
+    grammar = ("\"", ZERO_OR_MORE(OR(("\\", ANY), ANY_EXCEPT("\""))), "\"")
 
 class String(Grammar):
-	grammar = SingleString | DoubleString
+    grammar = SingleString | DoubleString
 
 class Number(Grammar):
-	grammar = (OPTIONAL("-"), DecimalNumber | BinaryNumber | HexNumber | ExtOctalNumber | OctalNumber, OPTIONAL("j"))
+    grammar = (OPTIONAL("-"), DecimalNumber | BinaryNumber | HexNumber | ExtOctalNumber | OctalNumber, OPTIONAL("j"))
 
 class Literal(Grammar):
-	grammar = String | Number
+    grammar = String | Number
 
 class Identifier(Grammar):
-	grammar = WORD("A-Za-z_", "A-Za-z_0-9")
+    grammar = WORD("A-Za-z_", "A-Za-z_0-9")
 
 class Bracketed(Grammar):
-	grammar = ("(", REF("_expr"), ")")
+    grammar = ("(", REF("_expr"), ")")
 
 class Value(Grammar):
-	grammar = Identifier | Literal | Bracketed
+    grammar = Identifier | Literal | Bracketed
 
 class Slice(Grammar):
-	grammar = (OPTIONAL(REF("Expression")), ":", OPTIONAL(REF("Expression")), OPTIONAL(":", OPTIONAL(REF("Expression"))))
+    grammar = (OPTIONAL(REF("Expression")), ":", OPTIONAL(REF("Expression")), OPTIONAL(":", OPTIONAL(REF("Expression"))))
 
 class IndexAccessor(Grammar):
-	grammar = Slice | REF("Expression")
+    grammar = Slice | REF("Expression")
 
 class IndexAccess(Grammar):
-	grammar = (Value, ZERO_OR_MORE("[", OPTIONAL(LIST_OF(IndexAccessor, sep = ",", grammar_whitespace_mode = "optional")), "]"))
+    grammar = (Value, ZERO_OR_MORE("[", OPTIONAL(LIST_OF(IndexAccessor, sep = ",", grammar_whitespace_mode = "optional")), "]"))
 
 class FunctionCall(Grammar):
-	grammar = (Bracketed | Identifier, "(", LIST_OF(REF("Expression"), sep = ",", min = 0, grammar_whitespace_mode = "optional"), ")")
+    grammar = (Bracketed | Identifier, "(", LIST_OF(REF("Expression"), sep = ",", min = 0, grammar_whitespace_mode = "optional"), ")")
 
 class FunctionAtCall(Grammar):
-	grammar = LIST_OF(FunctionCall | IndexAccess, sep = "@", grammar_whitespace_mode = "optional")
+    grammar = LIST_OF(FunctionCall | IndexAccess, sep = "@", grammar_whitespace_mode = "optional")
 
 class IndexHashAccess(Grammar):
-	grammar = LIST_OF(FunctionAtCall, sep = "#", grammar_whitespace_mode = "optional")
+    grammar = LIST_OF(FunctionAtCall, sep = "#", grammar_whitespace_mode = "optional")
 
 class Exponent(Grammar):
-	grammar = LIST_OF(IndexHashAccess, sep = "**", grammar_whitespace_mode = "optional")
+    grammar = LIST_OF(IndexHashAccess, sep = "**", grammar_whitespace_mode = "optional")
 
 class Product(Grammar):
-	grammar = LIST_OF(Exponent, sep = OR("*", "/", "/,", "%", "/@"), grammar_whitespace_mode = "optional")
+    grammar = LIST_OF(Exponent, sep = OR("*", "/", "/,", "%", "/@"), grammar_whitespace_mode = "optional")
 
 class Sum(Grammar):
-	grammar = LIST_OF(Product, sep = OR("+", "-"), grammar_whitespace_mode = "optional")
+    grammar = LIST_OF(Product, sep = OR("+", "-"), grammar_whitespace_mode = "optional")
 
 class FunctionTildeCall(Grammar):
-	grammar = LIST_OF(Sum, sep = "~", grammar_whitespace_mode = "optional")
+    grammar = LIST_OF(Sum, sep = "~", grammar_whitespace_mode = "optional")
 
 class FunctionPipeCall(Grammar):
-	grammar = LIST_OF(FunctionTildeCall, sep = "|>", grammar_whitespace_mode = "optional")
+    grammar = LIST_OF(FunctionTildeCall, sep = "|>", grammar_whitespace_mode = "optional")
 
 class ComparisonChain(Grammar):
-	grammar = LIST_OF(FunctionPipeCall, sep = OR(">", "<", ">=", "<=", "==", "!="), grammar_whitespace_mode = "optional")
+    grammar = LIST_OF(FunctionPipeCall, sep = OR(">", "<", ">=", "<=", "==", "!="), grammar_whitespace_mode = "optional")
 
 class List(Grammar):
-	grammar = OR(("[", OR(REF("Tuple"), REF("Expression")), "]"), ("[", "]"))
+    grammar = OR(("[", OR(REF("Tuple"), REF("Expression")), "]"), ("[", "]"))
 
 class Set(Grammar):
-	grammar = ("{", OR(REF("Tuple"), REF("Expression")), "}")
+    grammar = ("{", OR(REF("Tuple"), REF("Expression")), "}")
 
 class DictEntry(Grammar):
-	grammar = (REF("Expression"), ":", REF("Expression"))
+    grammar = (REF("Expression"), ":", REF("Expression"))
 
 class Dict(Grammar):
-	grammar = ("{", LIST_OF(DictEntry, sep = ",", grammar_whitespace_mode = "optional"), "}")
+    grammar = ("{", LIST_OF(DictEntry, sep = ",", grammar_whitespace_mode = "optional"), "}")
 
 class Tuple(Grammar):
-	grammar = LIST_OF(OPTIONAL(ComparisonChain | List | Set | Dict), sep = ",", grammar_whitespace_mode = "optional")
+    grammar = LIST_OF(OPTIONAL(ComparisonChain | List | Set | Dict), sep = ",", grammar_whitespace_mode = "optional")
 
 class Assignable(Grammar):
-	grammar = Identifier
+    grammar = Identifier
 
 class Assignment(Grammar):
-	grammar = (LIST_OF(Assignable, sep = "=", grammar_whitespace_mode = "optional"), "=", REF("Expression"))
-	grammar_whitespace_mode = "optional"
+    grammar = (LIST_OF(Assignable, sep = "=", grammar_whitespace_mode = "optional"), "=", REF("Expression"))
+    grammar_whitespace_mode = "optional"
 
 class If(Grammar):
-	grammar = ("if", REF("Expression"), REF("Expression"), OPTIONAL("else", REF("Expression")))
-	grammar_whitespace_mode = "optional"
+    grammar = ("if", REF("Expression"), REF("Expression"), OPTIONAL("else", REF("Expression")))
+    grammar_whitespace_mode = "optional"
 
 class For(Grammar):
-	grammar = ("for", REF("Expression"), ":", REF("Expression"), REF("Expression"), OPTIONAL("else", REF("Expression")))
-	grammar_whitespace_mode = "optional"
+    grammar = ("for", REF("Expression"), ":", REF("Expression"), REF("Expression"), OPTIONAL("else", REF("Expression")))
+    grammar_whitespace_mode = "optional"
 
 class _expr(Grammar):
-	grammar = If | For | List | Dict | Set | Tuple
+    grammar = If | For | List | Dict | Set | Tuple
 
 class Expr(Grammar):
-	grammar = ("(", Assignment | _expr, ")")
+    grammar = ("(", Assignment | _expr, ")")
 
 class Expression(Grammar):
-	grammar = Expr | Assignment | _expr
+    grammar = Expr | Assignment | _expr
 
 class Statement(Grammar):
-	grammar = (Expression)
+    grammar = (Expression)
 
 class Program(Grammar):
-	grammar = LIST_OF(Statement, sep = (ZERO_OR_MORE(SPACE), L(";") | L("\n") | (L(";"), ZERO_OR_MORE(SPACE), L("\n")), ZERO_OR_MORE(SPACE)), grammar_whitespace_mode = "explicit")
+    grammar = LIST_OF(Statement, sep = (ZERO_OR_MORE(SPACE), L(";") | L("\n") | (L(";"), ZERO_OR_MORE(SPACE), L("\n")), ZERO_OR_MORE(SPACE)), grammar_whitespace_mode = "explicit")
 
 class GetterWrapper:
-	def __init__(self, object = None):
-		self.object = object
-	def __call__(self, index):
-		if self.object is None:
-			raise AttributeError("NoneType object has no _real_ attributes")
-		else:
-			return getattr(self.object, index)
-	def __str__(self):
-		return str(self.object)
-	def __repr__(self):
-		return repr(self.object)
+    def __init__(self, object = None):
+        self.object = object
+    def __call__(self, index):
+        if self.object is None:
+            raise AttributeError("NoneType object has no _real_ attributes")
+        else:
+            return getattr(self.object, index)
+    def __str__(self):
+        return str(self.object)
+    def __repr__(self):
+        return repr(self.object)
 
 class ProtonObject:
-	def __init__(self, parent = None, attrs = None):
-		self.parent = GetterWrapper(parent)
-		self.attrs = attrs or {}
-	def __call__(self, index):
-		if index in self.attrs:
-			return self.attrs[index]
-		else:
-			return self.parent(index)
-	def __str__(self):
-		return str(self.parent)
-	def __repr__(self):
-		return repr(self.parent)
-	def __eq__(self, other):
-		return isinstance(other, ProtonObject) and self.parent.object == other.parent.object
-	def __hash__(self):
-		return hash(self.parent.object)
+    def __init__(self, parent = None, attrs = None):
+        self.parent = GetterWrapper(parent)
+        self.attrs = attrs or {}
+    def __call__(self, index):
+        if index in self.attrs:
+            return self.attrs[index]
+        else:
+            return self.parent(index)
+    def __str__(self):
+        return str(self.parent)
+    def __repr__(self):
+        return repr(self.parent)
+    def __eq__(self, other):
+        return isinstance(other, ProtonObject) and self.parent.object == other.parent.object
+    def __hash__(self):
+        return hash(self.parent.object)
 
-class ProtonList:
-	def __init__(self, elements):
-		self.elements = list(elements)
-	def __getitem__(self, index):
-		if hasattr(index, "__iter__") and not isinstance(index, str):
-			return ProtonObject(type(index)([ProtonObject(self[sub.parent.object]) for sub in index]))
-		else:
-			if isinstance(index, slice):
-				if (index.start is not None and index.start % 1) or (index.stop is not None and index.stop % 1) or (index.step is not None and index.step % 1):
-					raise RuntimeError("Slice indices must be integers or None")
-				else:
-					intify = lambda l: None if l is None else intify(l)
-					return self.elements[intify(index.start):intify(index.stop):intify(index.step)]
-			else:
-				if index % 1:
-					return (self.elements[int(index)], self.elements[int(index + 1)])
-				else:
-					return self.elements[int(index)]
-	def __iter__(self):
-		return iter(self.elements)
-	def __str__(self):
-		return str(self.elements)
-	def __repr__(self):
-		return repr(self.elements)
+def proton_object(object, attrs = None):
+    if isinstance(object, ProtonObject):
+        return object
+    else:
+        return ProtonObject(object, attrs)
+
+class ProtonString:
+    def __init__(self, elements):
+        self.elements = ProtonList(elements)
+    def __getitem__(self, index):
+        items = self.elements[index]
+        return proton_object("".join(items) if hasattr(items, "__iter__") else str(items))
+    def __str__(self):
+        return str("".join(self.elements))
+    def __repr__(self):
+        return repr("".join(self.elements))
+
+class ProtonList(list):
+    def __init__(self, elements):
+        self.elements = list(elements)
+    def __getitem__(self, index):
+        if hasattr(index, "__iter__") and not isinstance(index, str):
+            return proton_object(type(index)([proton_object(self[sub.parent.object]) for sub in index]))
+        else:
+            if isinstance(index, slice):
+                if (index.start is not None and index.start % 1) or (index.stop is not None and index.stop % 1) or (index.step is not None and index.step % 1):
+                    raise RuntimeError("Slice indices must be integers or None")
+                else:
+                    intify = lambda l: None if l is None else intify(l)
+                    return self.elements[intify(index.start):intify(index.stop):intify(index.step)]
+            else:
+                if index % 1:
+                    return (self.elements[int(index)], self.elements[int(index + 1)])
+                else:
+                    return self.elements[int(index)]
+    def __iter__(self):
+        return iter(self.elements)
+    def __str__(self):
+        return str(self.elements)
+    def __repr__(self):
+        return repr(self.elements)
 
 def base_convert(string, base, indexstr = None):
-	if "." in string or indexstr:
-		indexstr = indexstr or "0123456789abcdefghijklmnopqrstuvwxyz"
-		val = to_float(0)
-		mul = 1
-		for c in string[:string.find(".")][::-1]:
-			val += mul * indexstr.find(c)
-			mul *= base
-		mul = to_float("1/%d" % base)
-		for c in string[string.find(".") + 1:]:
-			val += mul * indexstr.find(c)
-			mul /= base
-		return val
-	else:
-		return to_float(int(string, base))
+    if "." in string or indexstr:
+        indexstr = indexstr or "0123456789abcdefghijklmnopqrstuvwxyz"
+        val = to_float(0)
+        mul = 1
+        for c in string[:string.find(".")][::-1]:
+            val += mul * indexstr.find(c)
+            mul *= base
+        mul = to_float("1/%d" % base)
+        for c in string[string.find(".") + 1:]:
+            val += mul * indexstr.find(c)
+            mul /= base
+        return val
+    else:
+        return to_float(int(string, base))
 
 def get_reducers(d):
-	return {e: reducer(d[e]) for e in d}
+    return {e: reducer(d[e]) for e in d}
 
 def reducer(name):
-	return (lambda val: val(name)) if isinstance(name, str) else name
+    return (lambda val: val(name)) if isinstance(name, str) else name
 
 def chain_attempts(*getters):
-	for g in getters:
-		try:
-			return g()
-		except:
-			pass
-	return None
+    for g in getters:
+        try:
+            return g()
+        except:
+            pass
+    return None
 
 def floor(val):
-	try:
-		return val.__floor__()
-	except:
-		return val - val % 1
+    try:
+        return val.__floor__()
+    except:
+        return val - val % 1
 
 global_scope = {
-	"print": ProtonObject(print),
-	"input": ProtonObject(input),
-	"int": ProtonObject(lambda i: to_float(int(i))),
-	"float": ProtonObject(to_float),
+    "print": proton_object(print),
+    "input": proton_object(input),
+    "int": proton_object(lambda i: to_float(int(i))),
+    "float": proton_object(to_float),
 }
 
 def assn(node, val, scope):
-	if node.grammar_name == "Identifier":
-		name = str(node)
-		for i in range(len(scope)):
-			if name in scope[~i]:
-				scope[~i][name] = val
-				break
-		else:
-			scope[-1][name] = val
-	else:
-		assn(node[0], val, scope)
+    if node.grammar_name == "Identifier":
+        name = str(node)
+        for i in range(len(scope)):
+            if name in scope[~i]:
+                scope[~i][name] = val
+                break
+        else:
+            scope[-1][name] = val
+    else:
+        assn(node[0], val, scope)
 
 def assign(nodes, scope):
-	value = global_eval(nodes[-1])
-	for node in nodes[:-1]:
-		assn(node, value, scope)
-	return value
+    value = global_eval(nodes[-1])
+    for node in nodes[:-1]:
+        assn(node, value, scope)
+    return value
 
 def global_eval(node, nest_level = 0, scope = [global_scope]):
-	evaluate = lambda node: global_eval(node, nest_level + 1, scope)
-	def fold(node, reducers, reverse = False):
-		values = list(map(evaluate, list(node[0])[::2]))
-		operators = list(map(str, list(node[0])[1::2]))[::-1 if reverse else 1]
-		if reverse:
-			for i in range(len(values) - 2, -1, -1):
-				values[i] = ProtonObject(reducers[operators.pop(0)](values[i])(values[i + 1].parent.object))
-			return values[0]
-		else:
-			for i in range(1, len(values)):
-				values[0] = ProtonObject(reducers[operators.pop(0)](values[0])(values[i].parent.object))
-			return values[0]
-	if node == None:
-		return ProtonObject(None)
-	elif node.grammar_name == "Program":
-		return list(map(evaluate, list(node[0])[::2]))
-	elif node.grammar_name == "Statement":
-		return evaluate(node[0])
-	elif node.grammar_name == "Expression":
-		return evaluate(node[0])
-	elif node.grammar_name == "_expr":
-		return evaluate(node[0])
-	elif node.grammar_name == "Expr":
-		return evaluate(node[1])
-	elif node.grammar_name == "Assignment":
-		return assign(list(node[0])[::2] + [node[2]], scope)
-	elif node.grammar_name == "If":
-		if evaluate(node[1])("__bool__")():
-			return evaluate(node[2])
-		elif node[3]:
-			return evaluate(node[3][1])
-		else:
-			return None
-	elif node.grammar_name == "For":
-		pass # TODO
-	elif node.grammar_name == "FunctionAtCall":
-		return fold(node, get_reducers({"@": "__call__"}), True)
-	elif node.grammar_name == "IndexHashAccess":
-		return fold(node, get_reducers({"#": lambda v: lambda w: v("__getitem__")(w if w != None else slice(None))}))
-	elif node.grammar_name == "FunctionTildeCall":
-		nodes = list(node[0])[::2]
-		if len(nodes) % 2 == 0:
-			raise RuntimeError("Cannot properly interpret the meaning of an even number of expressions in a chained tilde function call")
-		else:
-			values = list(map(evaluate, nodes))
-			values[::2] = [e.parent.object for e in values[::2]]
-			while len(values) != 1:
-				values[:3] = [values[1]("__call__")(values[0], values[2])]
-			return ProtonObject(values[0])
-	elif node.grammar_name == "Dict":
-		return ProtonObject({evaluate(sub[0]): evaluate(sub[2]) for sub in list(node[1])[::2]})
-	elif node.grammar_name == "List":
-		if str(node) == "[]":
-			return ProtonObject(ProtonList([]))
-		else:
-			listify = lambda l: chain_attempts(lambda: ProtonList(l), lambda: ProtonList([l]))
-			return ProtonObject(listify(evaluate(node[0][1]).parent.object))
-	elif node.grammar_name == "Set":
-		setify = lambda s: chain_attempts(lambda: set(s), lambda: {s})
-		return ProtonObject(setify(evaluate(node[1]).parent.object))
-	elif node.grammar_name == "Tuple":
-		nodes = list(node[0])[::2]
-		if any(n is None for n in nodes[:-1]):
-			raise RuntimeError("Can't have two commas next to each other; the only optional argument allowed is the last one")
-		if nodes[-1] is None:
-			return ProtonObject(tuple(map(evaluate, nodes[:-1])))
-		elif len(nodes) != 1:
-			return ProtonObject(tuple(map(evaluate, nodes)))
-		else:
-			return evaluate(nodes[0])
-	elif node.grammar_name == "ComparisonChain":
-		comparisons = {
-			">":  "__gt__",
-			"<":  "__lt__",
-			">=": "__ge__",
-			"<=": "__le__",
-			"==": "__eq__",
-			"!=": "__ne__"
-		}
-		values = list(map(evaluate, list(node[0])[::2]))
-		if len(values) == 1: return values[0]
-		for i in range(len(values) - 1):
-			if not values[i](comparisons[str(node[0][i * 2 + 1])])(values[i + 1].parent.object):
-				return ProtonObject(False)
-		return ProtonObject(True)
-	elif node.grammar_name == "FunctionPipeCall":
-		return fold([list(node[0])[::-1]], get_reducers({"|>": "__call__"}), True)
-	elif node.grammar_name == "FunctionCall":
-		return ProtonObject(evaluate(node[0])("__call__")(*[evaluate(n).parent.object for n in list(node[2])[::2]]))
-	elif node.grammar_name == "Slice":
-		l = [node[0], node[2], node[3][1] if node[3] else node[3]]
-		return ProtonObject(slice(*[(evaluate(n).parent.object) for n in l]))
-	elif node.grammar_name == "IndexAccessor":
-		return evaluate(node[0])
-	elif node.grammar_name == "IndexAccess":
-		val = evaluate(node[0])
-		for subnode in node[1]:
-			indexlist = list(map(evaluate, list(subnode[1][0][0][0][0][0] if subnode[1][0][0][0][0].grammar_name == "Tuple" else subnode[1])[::2]))
-			if indexlist == []: val = ProtonObject(evaluate(node[0]).parent.object[:])
-			val = evaluate(node[0])
-			for index in indexlist:
-				val = val("__getitem__")(index.parent.object)
-		return val
-	elif node.grammar_name == "Exponent":
-		return fold(node, get_reducers({"**": "__pow__"}), True)
-	elif node.grammar_name == "Product":
-		return fold(node, get_reducers({"*": "__mul__", "/": "__truediv__", "/,": lambda val: chain_attempts(lambda: val("__floordiv__"), lambda: lambda a: floor(val("__div__")(a))), "%": "__mod__", "/@": lambda val: lambda array: (lambda getter: [ProtonObject(getter(element)) for element in array])(val("__call__"))}))
-	elif node.grammar_name == "Sum":
-		return fold(node, get_reducers({"+": "__add__", "-": "__sub__"}))
-	elif node.grammar_name == "Value":
-		return evaluate(node[0])
-	elif node.grammar_name == "Bracketed":
-		return evaluate(node[1])
-	elif node.grammar_name == "Identifier":
-		name = str(node)
-		for subscope in scope[::-1]:
-			if name in subscope:
-				return subscope[name]
-		raise NameError("Identifier `%s` has not been declared in this scope or any parent scopes" % name)
-	elif node.grammar_name == "Literal":
-		return evaluate(node[0])
-	elif node.grammar_name == "Number":
-		return ProtonObject((-1 if node[0] else 1) * evaluate(node[1]) * (1j if node[2] else 1))
-	elif node.grammar_name == "HexNumber":
-		s = str(node).split("x")
-		return base_convert(s[1].lower(), 16) * 16 ** int(s[0])
-	elif node.grammar_name == "BinaryNumber":
-		s = str(node).split("b")
-		return base_convert(s[1].lower(), 2) * 2 ** int(s[0])
-	elif node.grammar_name == "ExtOctalNumber":
-		s = str(node).split("o")
-		return base_convert(s[1].lower(), 8) * 8 ** int(s[0])
-	elif node.grammar_name == "OctalNumber":
-		return base_convert(str(node)[1:].lower(), 8)
-	elif node.grammar_name == "DecimalNumber":
-		return base_convert(str(node).lower(), 10)
-	elif node.grammar_name == "String":
-		return ProtonObject(ast.literal_eval(str(node)))
+    evaluate = lambda node: global_eval(node, nest_level + 1, scope)
+    def fold(node, reducers, reverse = False):
+        values = list(map(evaluate, list(node[0])[::2]))
+        operators = list(map(str, list(node[0])[1::2]))[::-1 if reverse else 1]
+        if reverse:
+            for i in range(len(values) - 2, -1, -1):
+                values[i] = proton_object(reducers[operators.pop(0)](values[i])(values[i + 1].parent.object))
+            return values[0]
+        else:
+            for i in range(1, len(values)):
+                values[0] = proton_object(reducers[operators.pop(0)](values[0])(values[i].parent.object))
+            return values[0]
+    if node == None:
+        return proton_object(None)
+    elif node.grammar_name == "Program":
+        return list(map(evaluate, list(node[0])[::2]))
+    elif node.grammar_name == "Statement":
+        return evaluate(node[0])
+    elif node.grammar_name == "Expression":
+        return evaluate(node[0])
+    elif node.grammar_name == "_expr":
+        return evaluate(node[0])
+    elif node.grammar_name == "Expr":
+        return evaluate(node[1])
+    elif node.grammar_name == "Assignment":
+        return assign(list(node[0])[::2] + [node[2]], scope)
+    elif node.grammar_name == "If":
+        if evaluate(node[1])("__bool__")():
+            return evaluate(node[2])
+        elif node[3]:
+            return evaluate(node[3][1])
+        else:
+            return None
+    elif node.grammar_name == "For":
+        pass # TODO
+    elif node.grammar_name == "FunctionAtCall":
+        return fold(node, get_reducers({"@": "__call__"}), True)
+    elif node.grammar_name == "IndexHashAccess":
+        return fold(node, get_reducers({"#": lambda v: lambda w: v("__getitem__")(w if w != None else slice(None))}))
+    elif node.grammar_name == "FunctionTildeCall":
+        nodes = list(node[0])[::2]
+        if len(nodes) % 2 == 0:
+            raise RuntimeError("Cannot properly interpret the meaning of an even number of expressions in a chained tilde function call")
+        else:
+            values = list(map(evaluate, nodes))
+            values[::2] = [e.parent.object for e in values[::2]]
+            while len(values) != 1:
+                values[:3] = [values[1]("__call__")(values[0], values[2])]
+            return proton_object(values[0])
+    elif node.grammar_name == "Dict":
+        return proton_object({evaluate(sub[0]): evaluate(sub[2]) for sub in list(node[1])[::2]})
+    elif node.grammar_name == "List":
+        if str(node) == "[]":
+            return proton_object(ProtonList([]))
+        else:
+            listify = lambda l: chain_attempts(lambda: ProtonList(l), lambda: ProtonList([l]))
+            return proton_object(listify(evaluate(node[0][1]).parent.object))
+    elif node.grammar_name == "Set":
+        setify = lambda s: chain_attempts(lambda: set(s), lambda: {s})
+        return proton_object(setify(evaluate(node[1]).parent.object))
+    elif node.grammar_name == "Tuple":
+        nodes = list(node[0])[::2]
+        if any(n is None for n in nodes[:-1]):
+            raise RuntimeError("Can't have two commas next to each other; the only optional argument allowed is the last one")
+        if nodes[-1] is None:
+            return proton_object(tuple(map(evaluate, nodes[:-1])))
+        elif len(nodes) != 1:
+            return proton_object(tuple(map(evaluate, nodes)))
+        else:
+            return evaluate(nodes[0])
+    elif node.grammar_name == "ComparisonChain":
+        comparisons = {
+            ">":  "__gt__",
+            "<":  "__lt__",
+            ">=": "__ge__",
+            "<=": "__le__",
+            "==": "__eq__",
+            "!=": "__ne__"
+        }
+        values = list(map(evaluate, list(node[0])[::2]))
+        if len(values) == 1: return values[0]
+        for i in range(len(values) - 1):
+            if not values[i](comparisons[str(node[0][i * 2 + 1])])(values[i + 1].parent.object):
+                return proton_object(False)
+        return proton_object(True)
+    elif node.grammar_name == "FunctionPipeCall":
+        return fold([list(node[0])[::-1]], get_reducers({"|>": "__call__"}), True)
+    elif node.grammar_name == "FunctionCall":
+        return proton_object(evaluate(node[0])("__call__")(*[evaluate(n).parent.object for n in list(node[2])[::2]]))
+    elif node.grammar_name == "Slice":
+        l = [node[0], node[2], node[3][1] if node[3] else node[3]]
+        return proton_object(slice(*[(evaluate(n).parent.object) for n in l]))
+    elif node.grammar_name == "IndexAccessor":
+        return evaluate(node[0])
+    elif node.grammar_name == "IndexAccess":
+        val = evaluate(node[0])
+        for subnode in node[1]:
+            indexlist = list(map(evaluate, list(subnode[1][0][0][0][0][0] if subnode[1][0][0][0][0].grammar_name == "Tuple" else subnode[1])[::2]))
+            if indexlist == []: val = proton_object(evaluate(node[0]).parent.object[:])
+            val = evaluate(node[0])
+            for index in indexlist:
+                val = val("__getitem__")(index.parent.object)
+        return val
+    elif node.grammar_name == "Exponent":
+        return fold(node, get_reducers({"**": "__pow__"}), True)
+    elif node.grammar_name == "Product":
+        return fold(node, get_reducers({"*": "__mul__", "/": "__truediv__", "/,": lambda val: chain_attempts(lambda: val("__floordiv__"), lambda: lambda a: floor(val("__div__")(a))), "%": "__mod__", "/@": lambda val: lambda array: (lambda getter: [proton_object(getter(element)) for element in array])(val("__call__"))}))
+    elif node.grammar_name == "Sum":
+        return fold(node, get_reducers({"+": "__add__", "-": "__sub__"}))
+    elif node.grammar_name == "Value":
+        return evaluate(node[0])
+    elif node.grammar_name == "Bracketed":
+        return evaluate(node[1])
+    elif node.grammar_name == "Identifier":
+        name = str(node)
+        for subscope in scope[::-1]:
+            if name in subscope:
+                return subscope[name]
+        raise NameError("Identifier `%s` has not been declared in this scope or any parent scopes" % name)
+    elif node.grammar_name == "Literal":
+        return evaluate(node[0])
+    elif node.grammar_name == "Number":
+        return proton_object((-1 if node[0] else 1) * evaluate(node[1]) * (1j if node[2] else 1))
+    elif node.grammar_name == "HexNumber":
+        s = str(node).split("x")
+        return base_convert(s[1].lower(), 16) * 16 ** int(s[0])
+    elif node.grammar_name == "BinaryNumber":
+        s = str(node).split("b")
+        return base_convert(s[1].lower(), 2) * 2 ** int(s[0])
+    elif node.grammar_name == "ExtOctalNumber":
+        s = str(node).split("o")
+        return base_convert(s[1].lower(), 8) * 8 ** int(s[0])
+    elif node.grammar_name == "OctalNumber":
+        return base_convert(str(node)[1:].lower(), 8)
+    elif node.grammar_name == "DecimalNumber":
+        return base_convert(str(node).lower(), 10)
+    elif node.grammar_name == "String":
+        return proton_object(ProtonString(ast.literal_eval(str(node))))
 
 def remove_comments(string):
-	output = ""
-	i = 0
-	while i < len(string):
-		if string[i] == "\'" or string[i] == "\"":
-			close = string[i]
-			output += close
-			i += 1
-			while string[i] != close:
-				if string[i] == "\\":
-					output += "\\" + string[i + 1]
-					i += 2
-				else:
-					output += string[i]
-					i += 1
-			output += close
-			i += 1
-		elif string[i:i + 2] == "//":
-			while i < len(string) and string[i] != "\n":
-				i += 1
-		elif string[i:i + 2] == "/*":
-			nesting = 1
-			if i >= len(string):
-				raise RuntimeError("Unclosed multiline comment")
-			while nesting:
-				i += 1
-				if string[i:i + 2] == "/*":
-					nesting += 1
-				elif string[i:i + 2] == "*/":
-					nesting -= 1
-			i += 2
-		else:
-			output += string[i]
-			i += 1
-	return output
+    output = ""
+    i = 0
+    while i < len(string):
+        if string[i] == "\'" or string[i] == "\"":
+            close = string[i]
+            output += close
+            i += 1
+            while string[i] != close:
+                if string[i] == "\\":
+                    output += "\\" + string[i + 1]
+                    i += 2
+                else:
+                    output += string[i]
+                    i += 1
+            output += close
+            i += 1
+        elif string[i:i + 2] == "//":
+            while i < len(string) and string[i] != "\n":
+                i += 1
+        elif string[i:i + 2] == "/*":
+            nesting = 1
+            if i >= len(string):
+                raise RuntimeError("Unclosed multiline comment")
+            while nesting:
+                i += 1
+                if string[i:i + 2] == "/*":
+                    nesting += 1
+                elif string[i:i + 2] == "*/":
+                    nesting -= 1
+            i += 2
+        else:
+            output += string[i]
+            i += 1
+    return output
 
 grammar_whitespace_mode = "optional"
 
 def prettyprint(node, indent = 0):
-	print(indent * " " + repr(node))
-	try:
-		for n in node:
-			prettyprint(n, indent + 1)
-	except:
-		pass
+    print(indent * " " + repr(node))
+    try:
+        for n in node:
+            prettyprint(n, indent + 1)
+    except:
+        pass
 
 def _print(val):
-	if isinstance(val, list) and val and val[-1].parent.object is not None:
-		print(val[-1])
+    if isinstance(val, list) and val and val[-1].parent.object is not None:
+        print(val[-1])
 
 mode = prettyprint if parse else global_eval
 
 parser = globals()[parser]
 
 if file:
-	try:
-		mode(parser.parser().parse_string(remove_comments(open(file, "r").read().strip())))
-	except RecursionError:
-		sys.stderr.write("RecursionError - Likely caused by incomplete parsing - check your statements\n")
+    try:
+        mode(parser.parser().parse_string(remove_comments(open(file, "r").read().strip())))
+    except RecursionError:
+        sys.stderr.write("RecursionError - Likely caused by incomplete parsing - check your statements\n")
 elif code:
-	try:
-		mode(parser.parser().parse_string(remove_comments(code.strip())))
-	except RecursionError:
-		sys.stderr.write("RecursionError - Likely caused by incomplete parsing - check your statements\n")
+    try:
+        mode(parser.parser().parse_string(remove_comments(code.strip())))
+    except RecursionError:
+        sys.stderr.write("RecursionError - Likely caused by incomplete parsing - check your statements\n")
 else:
-	while True:
-		try:
-			mode = prettyprint if parse else lambda k: _print(global_eval(k))
-			mode(parser.parser().parse_string(remove_comments(input(">>> ").strip())))
-		except KeyboardInterrupt:
-			print("\b\b  \nKeyboardInterrupt")
-		except EOFError:
-			break
-		except RecursionError:
-			print("RecursionError - Likely caused by incomplete parsing - check your statements")
-		except Exception as e:
-			traceback.print_exc()
+    while True:
+        try:
+            mode = prettyprint if parse else lambda k: _print(global_eval(k))
+            mode(parser.parser().parse_string(remove_comments(input(">>> ").strip())))
+        except KeyboardInterrupt:
+            print("\b\b  \nKeyboardInterrupt")
+        except EOFError:
+            break
+        except RecursionError:
+            print("RecursionError - Likely caused by incomplete parsing - check your statements")
+        except Exception as e:
+            traceback.print_exc()

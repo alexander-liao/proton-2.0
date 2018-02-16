@@ -1,86 +1,35 @@
-Program<'a[1,2]'>
-    <LIST><'a[1,2]'>
-        Statement<'a[1,2]'>
-            Expression<'a[1,2]'>
-                Tuple<'a[1,2]'>
-                    <LIST><'a[1,2]'>
-                        ComparisonChain<'a[1,2]'>
-                            <LIST><'a[1,2]'>
-                                FunctionPipeCall<'a[1,2]'>
-                                    <LIST><'a[1,2]'>
-                                        FunctionTildeCall<'a[1,2]'>
-                                            <LIST><'a[1,2]'>
-                                                Sum<'a[1,2]'>
-                                                    <LIST><'a[1,2]'>
-                                                        Product<'a[1,2]'>
-                                                            <LIST><'a[1,2]'>
-                                                                Exponent<'a[1,2]'>
-                                                                    <LIST><'a[1,2]'>
-                                                                        IndexHashAccess<'a[1,2]'>
-                                                                            <LIST><'a[1,2]'>
-                                                                                FunctionAtCall<'a[1,2]'>
-                                                                                    <LIST><'a[1,2]'>
-                                                                                        IndexAccess<'a', '[', '1,2', ']'>
-                                                                                            Value<'a'>
-                                                                                                Identifier<'a'>
-                                                                                                    WORD('A-Za-z_', 'A-Za-z_0-9')<'a'>
-                                                                                            L('[')<'['>
-                                                                                            <LIST><'1,2'>
-                                                                                                IndexAccessor<'1,2'>
-                                                                                                    Expression<'1,2'>
-                                                                                                        Tuple<'1,2'>
-                                                                                                            <LIST><'1', ',', '2'>
-                                                                                                                ComparisonChain<'1'>
-                                                                                                                    <LIST><'1'>
-                                                                                                                        FunctionPipeCall<'1'>
-                                                                                                                            <LIST><'1'>
-                                                                                                                                FunctionTildeCall<'1'>
-                                                                                                                                    <LIST><'1'>
-                                                                                                                                        Sum<'1'>
-                                                                                                                                            <LIST><'1'>
-                                                                                                                                                Product<'1'>
-                                                                                                                                                    <LIST><'1'>
-                                                                                                                                                        Exponent<'1'>
-                                                                                                                                                            <LIST><'1'>
-                                                                                                                                                                IndexHashAccess<'1'>
-                                                                                                                                                                    <LIST><'1'>
-                                                                                                                                                                        FunctionAtCall<'1'>
-                                                                                                                                                                            <LIST><'1'>
-                                                                                                                                                                                Value<'1'>
-                                                                                                                                                                                    Literal<'1'>
-                                                                                                                                                                                        Number<None, '1', None>
-                                                                                                                                                                                            None
-                                                                                                                                                                                            DecimalNumber<'1'>
-                                                                                                                                                                                                <GRAMMAR><'1', None>
-                                                                                                                                                                                                    NZD<'1'>
-                                                                                                                                                                                                        L('1')<'1'>
-                                                                                                                                                                                                    None
-                                                                                                                                                                                            None
-                                                                                                                L(',')<','>
-                                                                                                                ComparisonChain<'2'>
-                                                                                                                    <LIST><'2'>
-                                                                                                                        FunctionPipeCall<'2'>
-                                                                                                                            <LIST><'2'>
-                                                                                                                                FunctionTildeCall<'2'>
-                                                                                                                                    <LIST><'2'>
-                                                                                                                                        Sum<'2'>
-                                                                                                                                            <LIST><'2'>
-                                                                                                                                                Product<'2'>
-                                                                                                                                                    <LIST><'2'>
-                                                                                                                                                        Exponent<'2'>
-                                                                                                                                                            <LIST><'2'>
-                                                                                                                                                                IndexHashAccess<'2'>
-                                                                                                                                                                    <LIST><'2'>
-                                                                                                                                                                        FunctionAtCall<'2'>
-                                                                                                                                                                            <LIST><'2'>
-                                                                                                                                                                                Value<'2'>
-                                                                                                                                                                                    Literal<'2'>
-                                                                                                                                                                                        Number<None, '2', None>
-                                                                                                                                                                                            None
-                                                                                                                                                                                            DecimalNumber<'2'>
-                                                                                                                                                                                                <GRAMMAR><'2', None>
-                                                                                                                                                                                                    NZD<'2'>
-                                                                                                                                                                                                        L('2')<'2'>
-                                                                                                                                                                                                    None
-                                                                                                                                                                                            None
-                                                                                            L(']')<']'>
+Program<'1'>
+ <LIST><'1'>
+  Statement<'1'>
+   Expression<'1'>
+    _expr<'1'>
+     Tuple<'1'>
+      <LIST><'1'>
+       ComparisonChain<'1'>
+        <LIST><'1'>
+         FunctionPipeCall<'1'>
+          <LIST><'1'>
+           FunctionTildeCall<'1'>
+            <LIST><'1'>
+             Sum<'1'>
+              <LIST><'1'>
+               Product<'1'>
+                <LIST><'1'>
+                 Exponent<'1'>
+                  <LIST><'1'>
+                   IndexHashAccess<'1'>
+                    <LIST><'1'>
+                     FunctionAtCall<'1'>
+                      <LIST><'1'>
+                       IndexAccess<'1', ''>
+                        Value<'1'>
+                         Literal<'1'>
+                          Number<None, '1', None>
+                           None
+                           DecimalNumber<'1'>
+                            <GRAMMAR><'1', None>
+                             NZD<'1'>
+                              L('1')<'1'>
+                             None
+                           None
+                        <REPEAT><''>
