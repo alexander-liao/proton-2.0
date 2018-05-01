@@ -103,7 +103,7 @@ class Bracketed(Grammar):
 	grammar = ("(", REF("_expr"), ")")
 
 class Value(Grammar):
-	grammar = (ZERO_OR_MORE(OR("**", "*", "-", "~", "!")), OPTIONAL(WHITESPACE), Identifier | Literal | Bracketed | REF("Set") | REF("Dict"))
+	grammar = (ZERO_OR_MORE(OR("**", "*", "-", "~", "!")), OPTIONAL(WHITESPACE), Identifier | Literal | Bracketed | REF("List") | REF("Set") | REF("Dict"))
 
 class Slice(Grammar):
 	grammar = (OPTIONAL(REF("Expression")), ":", OPTIONAL(REF("Expression")), OPTIONAL(":", OPTIONAL(REF("Expression"))))
@@ -114,8 +114,12 @@ class IndexAccessor(Grammar):
 class IndexAccess(Grammar):
 	grammar = (Value, ZERO_OR_MORE("[", OPTIONAL(LIST_OF(IndexAccessor, sep = ",", grammar_whitespace_mode = "optional")), "]"))
 
+class KeywordArgument(Grammar):
+	grammar = (Identifier, ":", REF("_notuple"))
+	grammar_whitespace_mode = "optional"
+
 class FunctionCall(Grammar):
-	grammar = (Bracketed | Identifier, ZERO_OR_MORE("(", OPTIONAL(REF("Expression")), ")"))
+	grammar = (Bracketed | Identifier, ZERO_OR_MORE(("(", LIST_OF(OR(KeywordArgument, REF("_notuple")), min = 0, sep = ",", grammar_whitespace_mode = "optional"), ")")))
 
 class FunctionAtCall(Grammar):
 	grammar = LIST_OF(FunctionCall | IndexAccess, sep = "@", grammar_whitespace_mode = "optional")
@@ -160,7 +164,7 @@ class Assignable(Grammar):
 	grammar = Identifier
 
 class Assignment(Grammar):
-	grammar = (LIST_OF(Assignable, sep = "=", grammar_whitespace_mode = "optional"), "=", REF("Expression"))
+	grammar = (LIST_OF(List | Bracketed | Tuple, sep = "=", grammar_whitespace_mode = "optional"), "=", REF("Expression"))
 	grammar_whitespace_mode = "optional"
 
 class If(Grammar):
@@ -170,6 +174,9 @@ class If(Grammar):
 class For(Grammar):
 	grammar = ("for", REF("Expression"), ":", REF("Expression"), REF("Expression"), OPTIONAL("else", REF("Expression")))
 	grammar_whitespace_mode = "optional"
+
+class _notuple(Grammar):
+	grammar = If | For | List | Dict | Set | ComparisonChain
 
 class _expr(Grammar):
 	grammar = If | For | List | Dict | Set | Tuple
@@ -246,6 +253,11 @@ class dsplat:
 	def __init__(self, item):
 		self.item = item
 
+class kwarg:
+	def __init__(self, key, val):
+		self.key = key
+		self.val = val
+
 global_scope = {
 	"print": print,
 	"input": input,
@@ -276,6 +288,8 @@ def global_eval(node, depth = 0, scope = [global_scope], debug = False):
 	elif name == "Expr":
 		return ieval(node[1])
 	elif name == "_expr":
+		return ieval(node[0])
+	elif name == "_notuple":
 		return ieval(node[0])
 	elif name == "Tuple":
 		nodes = list(node[0])[::2]
@@ -363,12 +377,7 @@ list(map(a, b))}[str(node[i])]
 	elif name == "FunctionCall":
 		val = ieval(node[0])
 		for j in list(node[1]):
-			if j[1] == None:
-				args = ()
-			elif j[1][0][0].grammar_name == "Tuple":
-				args = tuple(map(ieval, list(j[1][0][0][0])[::2]))
-			else:
-				args = (ieval(j[1]),)
+			args = map(ieval, list(j[1])[::2])
 			res = []
 			dres = {}
 			for arg in args:
@@ -376,6 +385,8 @@ list(map(a, b))}[str(node[i])]
 					res.extend(list(arg.item))
 				elif isinstance(arg, dsplat):
 					dres = {**dres, **arg.item}
+				elif isinstance(arg, kwarg):
+					dres[arg.key] = arg.val
 				else:
 					res.append(arg)
 			val = val(*res, **dres)
@@ -386,6 +397,8 @@ list(map(a, b))}[str(node[i])]
 		for oper in list(node[0])[::-1]:
 			val = unary[str(oper)](val)
 		return val
+	elif name == "KeywordArgument":
+		return kwarg(str(node[0]), ieval(node[2]))
 	elif name == "Literal":
 		return ieval(node[0])
 	elif name == "Identifier":
