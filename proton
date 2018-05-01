@@ -103,7 +103,7 @@ class Bracketed(Grammar):
 	grammar = ("(", REF("_expr"), ")")
 
 class Value(Grammar):
-	grammar = Identifier | Literal | Bracketed
+	grammar = (ZERO_OR_MORE(OR("**", "*", "-", "~", "!")), OPTIONAL(WHITESPACE), Identifier | Literal | Bracketed | REF("Set") | REF("Dict"))
 
 class Slice(Grammar):
 	grammar = (OPTIONAL(REF("Expression")), ":", OPTIONAL(REF("Expression")), OPTIONAL(":", OPTIONAL(REF("Expression"))))
@@ -115,7 +115,7 @@ class IndexAccess(Grammar):
 	grammar = (Value, ZERO_OR_MORE("[", OPTIONAL(LIST_OF(IndexAccessor, sep = ",", grammar_whitespace_mode = "optional")), "]"))
 
 class FunctionCall(Grammar):
-	grammar = (Bracketed | Identifier, ZERO_OR_MORE("(", LIST_OF(REF("Expression"), sep = ",", min = 0, grammar_whitespace_mode = "optional"), ")"))
+	grammar = (Bracketed | Identifier, ZERO_OR_MORE("(", OPTIONAL(REF("Expression")), ")"))
 
 class FunctionAtCall(Grammar):
 	grammar = LIST_OF(FunctionCall | IndexAccess, sep = "@", grammar_whitespace_mode = "optional")
@@ -233,8 +233,30 @@ def prep_index(val):
 		return val
 	return int(val)
 
-def global_eval(node, depth = 0, debug = False):
-	ieval = lambda *a, **k: global_eval(*a, **k, depth = depth + 1)
+pyrange = range
+
+def range(*a):
+	return list(map(to_float, pyrange(*map(int, a))))
+
+class splat:
+	def __init__(self, item):
+		self.item = item
+
+class dsplat:
+	def __init__(self, item):
+		self.item = item
+
+global_scope = {
+	"print": print,
+	"input": input,
+	"range": range,
+}
+
+def global_eval(node, depth = 0, scope = [global_scope], debug = False):
+	def ieval(*a, **k):
+		if "depth" not in k: k["depth"] = depth + 1
+		if "scope" not in k: k["scope"] = scope
+		return global_eval(*a, **k)
 	if node == None:
 		return None
 	name = node.grammar_name
@@ -256,13 +278,18 @@ def global_eval(node, depth = 0, debug = False):
 	elif name == "_expr":
 		return ieval(node[0])
 	elif name == "Tuple":
-		return tuple(map(ieval, list(node[0])[::2]))
+		nodes = list(node[0])[::2]
+		if len(nodes) == 1:
+			return ieval(nodes[0])
+		if nodes[-1] == None:
+			nodes.pop()
+		return tuple(map(ieval, nodes))
 	elif name == "List":
 		return list(ieval(node[0][1]))
 	elif name == "Set":
 		return set(ieval(node[1]))
 	elif name == "Dict":
-		return {ieval(k[0])[0]: ieval(k[2])[0] for k in node[1]}
+		return {ieval(k[0][0]): ieval(k[2][0]) for k in node[1]}
 	elif name == "ComparisonChain":
 		node = node[0]
 		root = ieval(node[0])
@@ -299,8 +326,9 @@ def global_eval(node, depth = 0, debug = False):
 	elif name == "Product":
 		node = node[0]
 		val = ieval(node[0])
+		itermul = lambda a, b: a * int(b) + a[:int(len(a) * (b % 1))]
 		for i in range(1, len(list(node)), 2):
-			combiner = {"*": operator.mul, "/": operator.div, "/,": operator.floordiv, "%": operator.mod, "/@": lambda a, b: 
+			combiner = {"*": lambda a, b: itermul(a, b) if hasattr(a, "__iter__") else itermul(b, a) if hasattr(b, "__iter__") else a * b, "/": operator.truediv, "/,": operator.floordiv, "%": operator.mod, "/@": lambda a, b: 
 list(map(a, b))}[str(node[i])]
 			val = combiner(val, ieval(node[i + 1]))
 		return val
@@ -325,7 +353,7 @@ list(map(a, b))}[str(node[i])]
 			val = val(*(arg if type(arg) == tuple else [arg]))
 		return val
 	elif name == "IndexAccess":
-		val = ieval(node[0][0])
+		val = ieval(node[0])
 		for j in list(node[1])[::2]:
 			arg = ieval(j[1][0])
 			val = val.__getitem__(*(prep_index(val) for val in (arg if type(arg) == tuple else [arg])))
@@ -335,8 +363,28 @@ list(map(a, b))}[str(node[i])]
 	elif name == "FunctionCall":
 		val = ieval(node[0])
 		for j in list(node[1]):
-			arg = ieval(j[1][0]) if list(j[1]) else ()
-			val = val(*(arg if type(arg) == tuple else [arg]))
+			if j[1] == None:
+				args = ()
+			elif j[1][0][0].grammar_name == "Tuple":
+				args = tuple(map(ieval, list(j[1][0][0][0])[::2]))
+			else:
+				args = (ieval(j[1]),)
+			res = []
+			dres = {}
+			for arg in args:
+				if isinstance(arg, splat):
+					res.extend(list(arg.item))
+				elif isinstance(arg, dsplat):
+					dres = {**dres, **arg.item}
+				else:
+					res.append(arg)
+			val = val(*res, **dres)
+		return val
+	elif name == "Value":
+		unary = {"-": operator.neg, "~": operator.invert, "!": operator.not_, "*": splat, "**": dsplat}
+		val = ieval(node[2])
+		for oper in list(node[0])[::-1]:
+			val = unary[str(oper)](val)
 		return val
 	elif name == "Literal":
 		return ieval(node[0])
