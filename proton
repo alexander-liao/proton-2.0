@@ -82,10 +82,10 @@ class HexNumber(Grammar):
 	grammar = (L("0") | (NZD, OPTIONAL(WORD("0-9"))), "x", number_format("0123456789abcdefABCDEF"))
 
 class SingleString(Grammar):
-	grammar = ("\'", ZERO_OR_MORE(OR(("\\", ANY), ANY_EXCEPT("\'"))), "\'")
+	grammar = ("\'", ZERO_OR_MORE(OR(ANY_EXCEPT("\\\'"), ("\\", ANY))), "\'")
 
 class DoubleString(Grammar):
-	grammar = ("\"", ZERO_OR_MORE(OR(("\\", ANY), ANY_EXCEPT("\""))), "\"")
+	grammar = ("\"", ZERO_OR_MORE(OR(ANY_EXCEPT("\\\""), ("\\", ANY))), "\"")
 
 class String(Grammar):
 	grammar = SingleString | DoubleString
@@ -118,8 +118,10 @@ class KeywordArgument(Grammar):
 	grammar = (Identifier, ":", REF("_notuple"))
 	grammar_whitespace_mode = "optional"
 
+# TODO
+
 class FunctionCall(Grammar):
-	grammar = (Bracketed | Identifier, ZERO_OR_MORE(("(", LIST_OF(OR(KeywordArgument, REF("_notuple")), min = 0, sep = ",", grammar_whitespace_mode = "optional"), ")")))
+	grammar = (Bracketed | Identifier, ZERO_OR_MORE(("(", LIST_OF(OR(REF("_notuple")), min = 0, sep = ",", grammar_whitespace_mode = "optional"), ")")))
 
 class FunctionAtCall(Grammar):
 	grammar = LIST_OF(FunctionCall | IndexAccess, sep = "@", grammar_whitespace_mode = "optional")
@@ -240,10 +242,8 @@ def prep_index(val):
 		return val
 	return int(val)
 
-pyrange = range
-
-def range(*a):
-	return list(map(to_float, pyrange(*map(int, a))))
+def proton_range(*a):
+	return list(map(to_float, range(*map(int, a))))
 
 class splat:
 	def __init__(self, item):
@@ -261,7 +261,7 @@ class kwarg:
 global_scope = {
 	"print": print,
 	"input": input,
-	"range": range,
+	"range": proton_range,
 }
 
 def global_eval(node, depth = 0, scope = [global_scope], debug = False):
