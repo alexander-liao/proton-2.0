@@ -334,7 +334,7 @@ def global_eval(node, depth = 0, scope = [global_scope], debug = False):
 		node = node[0]
 		val = ieval(node[0])
 		for i in range(1, len(list(node)), 2):
-			adder = {"+": operator.add, "-": operator.sub}[str(node[i])]
+			adder = {"+": lambda a, b: a + str(b) if isinstance(a, str) else str(a) + b if isinstance(b, str) else a + b, "-": operator.sub}[str(node[i])]
 			val = adder(val, ieval(node[i + 1]))
 		return val
 	elif name == "Product":
